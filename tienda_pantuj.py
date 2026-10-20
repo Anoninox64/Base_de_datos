@@ -78,14 +78,14 @@ def main(page: ft.Page):
 
     db = Database()
     
-    C_CELESTE_PRINCIPAL = ft.Colors.CYAN_700
-    C_GRIS_FONDO = ft.Colors.GREY_100
-    C_GRIS_BORDE = ft.Colors.GREY_300
-    C_TEXTO_NEGRO = ft.Colors.BLACK
-    C_BLANCO = ft.Colors.WHITE
+    C_CELESTE_PRINCIPAL = ft.colors.CYAN_700
+    C_GRIS_FONDO = ft.colors.GREY_100
+    C_GRIS_BORDE = ft.colors.GREY_300
+    C_TEXTO_NEGRO = ft.colors.BLACK
+    C_BLANCO = ft.colors.WHITE
 
     def mostrar_snack(mensaje: str, es_error=False):
-        color_bg = ft.Colors.RED_700 if es_error else C_CELESTE_PRINCIPAL
+        color_bg = ft.colors.RED_700 if es_error else C_CELESTE_PRINCIPAL
         snack = ft.SnackBar(
             content=ft.Text(mensaje, color=C_BLANCO, weight=ft.FontWeight.BOLD),
             bgcolor=color_bg,
@@ -128,14 +128,14 @@ def main(page: ft.Page):
         badge_estado.content = lbl_badge_texto
 
         lbl_caja_total = ft.Text("Caja: Q 0.00", size=16, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
-        lbl_banner_texto = ft.Text("", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.GREY_800)
+        lbl_banner_texto = ft.Text("", size=13, weight=ft.FontWeight.W_500, color=ft.colors.GREY_800)
         
         container_alerta_cierres = ft.Container(
             content=ft.Row([
-                ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.WHITE, size=18),
-                ft.Text("⚠️ Días pasados sin CERRAR CAJA.", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=12)
+                ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.colors.WHITE, size=18),
+                ft.Text("⚠️ Días pasados sin CERRAR CAJA.", color=ft.colors.WHITE, weight=ft.FontWeight.BOLD, size=12)
             ], alignment=ft.MainAxisAlignment.CENTER),
-            bgcolor=ft.Colors.RED_800,
+            bgcolor=ft.colors.RED_800,
             padding=6,
             border_radius=6,
             visible=False
@@ -189,7 +189,7 @@ def main(page: ft.Page):
         lbl_arqueo_fondo = ft.Text("Fondo Inicial: Q 0.00", size=13)
         lbl_arqueo_ventas = ft.Text("Ventas Directas: Q 0.00", size=13)
         lbl_arqueo_abonos = ft.Text("Abonos Cobrados: Q 0.00", size=13, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
-        lbl_arqueo_gastos = ft.Text("Retiros/Gastos: - Q 0.00", size=13, color=ft.Colors.RED_700)
+        lbl_arqueo_gastos = ft.Text("Retiros/Gastos: - Q 0.00", size=13, color=ft.colors.RED_700)
         lbl_arqueo_total_fisico = ft.Text("TOTAL ESPERADO: Q 0.00", size=16, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
 
         dt_abonos_hoy = ft.DataTable(
@@ -357,7 +357,7 @@ def main(page: ft.Page):
                                 ft.DataCell(ft.Text(v[0])),
                                 ft.DataCell(ft.Text(v[1])),
                                 ft.DataCell(ft.Text(f"Q {v[2]:.2f}")),
-                                ft.DataCell(ft.Text(f"Q {v[3]:.2f}", color=ft.Colors.RED_700 if v[3] > 0 else ft.Colors.GREEN_700)),
+                                ft.DataCell(ft.Text(f"Q {v[3]:.2f}", color=ft.colors.RED_700 if v[3] > 0 else ft.colors.GREEN_700)),
                             ])
                         )
                 page.overlay.append(dialog_historial)
@@ -426,7 +426,7 @@ def main(page: ft.Page):
                         ft.Text("💸 Salida de Efectivo", size=15, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
                         ft.Divider(color=C_GRIS_BORDE),
                         tf_gas_desc, tf_gas_monto,
-                        ft.Button("💾 Registrar Gasto", icon=ft.Icons.MONEY_OFF, on_click=guardar_gasto_click, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_800, color=C_BLANCO))
+                        ft.Button("💾 Registrar Gasto", icon=ft.Icons.MONEY_OFF, on_click=guardar_gasto_click, style=ft.ButtonStyle(bgcolor=ft.colors.GREY_800, color=C_BLANCO))
                     ], spacing=10),
                     width=320, padding=12, border=ft.Border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 ),
@@ -443,7 +443,7 @@ def main(page: ft.Page):
         )
 
         # PESTAÑA 5: DEUDAS
-        lbl_total_deudas_global = ft.Text("Pendiente Global: Q 0.00", size=15, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_700)
+        lbl_total_deudas_global = ft.Text("Pendiente Global: Q 0.00", size=15, weight=ft.FontWeight.BOLD, color=ft.colors.RED_700)
 
         dt_deudas = ft.DataTable(
             columns=[
@@ -533,7 +533,7 @@ def main(page: ft.Page):
                         ft.DataRow(cells=[
                             ft.DataCell(ft.Text(f_dia)),
                             ft.DataCell(ft.Text(f"Q {ing_d:.2f}")),
-                            ft.DataCell(ft.Text(st, color=ft.Colors.GREEN_700 if "Cerrado" in st else ft.Colors.RED_700)),
+                            ft.DataCell(ft.Text(st, color=ft.colors.GREEN_700 if "Cerrado" in st else ft.colors.RED_700)),
                         ])
                     )
 
@@ -642,7 +642,7 @@ def main(page: ft.Page):
         lbl_car_idx = ft.Text("", size=11, italic=True)
         lbl_car_name = ft.Text("", size=18, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
         lbl_car_info = ft.Text("", size=13)
-        lbl_car_alerta = ft.Text("", size=12, color=ft.Colors.RED_700, weight=ft.FontWeight.BOLD)
+        lbl_car_alerta = ft.Text("", size=12, color=ft.colors.RED_700, weight=ft.FontWeight.BOLD)
 
         tf_car_desc = ft.TextField(label="Detalle del Trabajo", border_radius=8)
         tf_car_total = ft.TextField(label="Total (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
@@ -780,7 +780,7 @@ def main(page: ft.Page):
 
         col_preg_carrusel.controls = [
             ft.Button("🟢 TRABAJÓ HOY", on_click=lambda e: mostrar_formulario_carrusel(), style=ft.ButtonStyle(bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO), width=350),
-            ft.Button("⚫ AUSENTE", on_click=lambda e: carrusel_marcar_inactivo(), style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_800, color=C_BLANCO), width=350),
+            ft.Button("⚫ AUSENTE", on_click=lambda e: carrusel_marcar_inactivo(), style=ft.ButtonStyle(bgcolor=ft.colors.GREY_800, color=C_BLANCO), width=350),
         ]
 
         def actualizar_botones_carrusel():
@@ -840,7 +840,7 @@ def main(page: ft.Page):
                             ft.DataCell(ft.Text(r[1], color=C_TEXTO_NEGRO)),
                             ft.DataCell(ft.Text(r[2], color=C_TEXTO_NEGRO)),
                             ft.DataCell(ft.Text(f"Q {r[3]:.2f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {r[4]:.2f}", color=ft.Colors.RED_700 if r[4] > 0 else C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Text(f"Q {r[4]:.2f}", color=ft.colors.RED_700 if r[4] > 0 else C_TEXTO_NEGRO)),
                         ])
                     )
 
@@ -954,8 +954,8 @@ def main(page: ft.Page):
                             ft.DataCell(ft.Text(f"Q {precio:.2f}", color=C_TEXTO_NEGRO)),
                             ft.DataCell(ft.Row([
                                 ft.IconButton(icon=ft.Icons.REMOVE_RED_EYE, icon_color=C_CELESTE_PRINCIPAL, on_click=ver_hist_fn, tooltip="Historial"),
-                                ft.IconButton(icon=ft.Icons.EDIT, icon_color=ft.Colors.GREY_700, on_click=editar_fn, tooltip="Editar"),
-                                ft.IconButton(icon=ft.Icons.DELETE, icon_color=ft.Colors.RED_600, on_click=borrar_fn, tooltip="Eliminar"),
+                                ft.IconButton(icon=ft.Icons.EDIT, icon_color=ft.colors.GREY_700, on_click=editar_fn, tooltip="Editar"),
+                                ft.IconButton(icon=ft.Icons.DELETE, icon_color=ft.colors.RED_600, on_click=borrar_fn, tooltip="Eliminar"),
                             ], spacing=0)),
                         ])
                     )
@@ -990,7 +990,7 @@ def main(page: ft.Page):
                             ft.DataCell(ft.Text(str(g_id), color=C_TEXTO_NEGRO)),
                             ft.DataCell(ft.Text(desc, color=C_TEXTO_NEGRO)),
                             ft.DataCell(ft.Text(f"Q {monto:.2f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.IconButton(icon=ft.Icons.DELETE, icon_color=ft.Colors.RED_600, on_click=eliminar_gasto_fn, tooltip="Borrar")),
+                            ft.DataCell(ft.IconButton(icon=ft.Icons.DELETE, icon_color=ft.colors.RED_600, on_click=eliminar_gasto_fn, tooltip="Borrar")),
                         ])
                     )
             except Exception as ex:
@@ -1020,7 +1020,7 @@ def main(page: ft.Page):
                             ft.DataCell(ft.Text(producto, color=C_TEXTO_NEGRO)),
                             ft.DataCell(ft.Text(f"Q {total:.2f}", color=C_TEXTO_NEGRO)),
                             ft.DataCell(ft.Text(f"Q {pagado:.2f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {pendiente:.2f}", color=ft.Colors.RED_700, weight=ft.FontWeight.BOLD)),
+                            ft.DataCell(ft.Text(f"Q {pendiente:.2f}", color=ft.colors.RED_700, weight=ft.FontWeight.BOLD)),
                             ft.DataCell(ft.Button("💰", on_click=abono_fn, style=ft.ButtonStyle(bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO))),
                         ])
                     )
@@ -1049,7 +1049,7 @@ def main(page: ft.Page):
             lbl_banner_texto.value = f"📅 {dias[estado['fecha'].weekday()]} {estado['fecha'].day}/{meses[estado['fecha'].month - 1]}/{estado['fecha'].year}"
 
             if es_dia_congelado():
-                badge_estado.bgcolor = ft.Colors.RED_700
+                badge_estado.bgcolor = ft.colors.RED_700
                 lbl_badge_texto.value = "🔒 CERRADO"
                 btn_carrusel.disabled = True
                 btn_cerrar_caja.visible = False
@@ -1124,8 +1124,8 @@ def main(page: ft.Page):
             page.update()
 
         btn_carrusel = ft.Button("⚡ Carrusel", icon=ft.Icons.FLASHLIGHT_ON, on_click=abrir_carrusel_click, style=ft.ButtonStyle(bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO))
-        btn_cerrar_caja = ft.Button("🔒 Cerrar", icon=ft.Icons.LOCK, on_click=ejecutar_cierre_dia, style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_800, color=C_BLANCO))
-        btn_abrir_caja = ft.Button("🔓 Reabrir", icon=ft.Icons.LOCK_OPEN, on_click=ejecutar_apertura_dia, style=ft.ButtonStyle(bgcolor=ft.Colors.ORANGE_800, color=C_BLANCO), visible=False)
+        btn_cerrar_caja = ft.Button("🔒 Cerrar", icon=ft.Icons.LOCK, on_click=ejecutar_cierre_dia, style=ft.ButtonStyle(bgcolor=ft.colors.GREY_800, color=C_BLANCO))
+        btn_abrir_caja = ft.Button("🔓 Reabrir", icon=ft.Icons.LOCK_OPEN, on_click=ejecutar_apertura_dia, style=ft.ButtonStyle(bgcolor=ft.colors.ORANGE_800, color=C_BLANCO), visible=False)
         btn_theme = ft.IconButton(icon=ft.Icons.DARK_MODE, on_click=toggle_theme, tooltip="Tema")
 
         header_bar = ft.Container(
@@ -1178,7 +1178,7 @@ def main(page: ft.Page):
     # ======================================================================
     tf_user = ft.TextField(label="Usuario", width=260, border_radius=8)
     tf_pass = ft.TextField(label="Contraseña", width=260, password=True, can_reveal_password=True, border_radius=8)
-    lbl_error_login = ft.Text("", color=ft.Colors.RED_700, weight=ft.FontWeight.BOLD, size=13)
+    lbl_error_login = ft.Text("", color=ft.colors.RED_700, weight=ft.FontWeight.BOLD, size=13)
 
     def validar_login(e):
         usuario = tf_user.value.strip() if tf_user.value else ""
@@ -1193,7 +1193,7 @@ def main(page: ft.Page):
     container_login = ft.Container(
         content=ft.Column([
             ft.Text("🔐 Acceso Tienda Pantuj", size=22, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
-            ft.Text("Control en la Nube", size=13, color=ft.Colors.GREY_700),
+            ft.Text("Control en la Nube", size=13, color=ft.colors.GREY_700),
             ft.Divider(color=C_GRIS_BORDE),
             tf_user,
             tf_pass,
