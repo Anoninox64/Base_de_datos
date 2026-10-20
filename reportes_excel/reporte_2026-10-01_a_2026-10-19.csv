@@ -1,0 +1,15 @@
+﻿REPORTE FINANCIERO - TIENDA PANTUJ
+Rango Evaluado;Desde 2026-10-01 hasta 2026-10-19
+
+RESUMEN CONTABLE;MONTO (Q)
+(+) Efectivo Bruto Recaudado;85.00
+(-) Egresos / Retiros de Caja;70.00
+(=) SALDO NETO EN CAJA;15.00
+(*) Dinero Fiado (Por Cobrar);0.00
+
+DETALLE DE VENTAS Y TRANSACCIONES EN EL RANGO
+ID;Fecha;Cliente;Producto / Detalle;Total;Pagado;Pendiente
+8;2026-10-19;dola chenta;molino;12.0;12.0;0.0
+9;2026-10-19;eliseos;sdfsdf;50.0;50.0;0.0
+10;2026-10-19;eliseos;Abono a cuentas pendientes de eliseos;0.0;20.0;0.0
+11;2026-10-19;eliseos;Abono Directo a: sdfsdf;0.0;3.0;0.0
