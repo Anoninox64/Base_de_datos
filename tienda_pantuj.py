@@ -118,14 +118,14 @@ def main(page: ft.Page):
             except Exception:
                 pass
 
-        txt_titulo = ft.Text("🏪 Tienda Pantuj", size=16, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
-        lbl_fecha = ft.Text("", size=12, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
+        txt_titulo = ft.Text("🏪 Tienda Pantuj", size=15, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
+        lbl_fecha = ft.Text("", size=11, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
         
         badge_estado = ft.Container(padding=ft.padding.symmetric(horizontal=4, vertical=2), border_radius=4)
         lbl_badge_texto = ft.Text("", color=C_BLANCO, weight=ft.FontWeight.BOLD, size=9)
         badge_estado.content = lbl_badge_texto
 
-        lbl_caja_total = ft.Text("Caja: Q 0.00", size=14, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
+        lbl_caja_total = ft.Text("Caja: Q 0.00", size=13, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
         lbl_banner_texto = ft.Text("", size=11, weight=ft.FontWeight.W_500, color=ft.colors.GREY_800)
         
         container_alerta_cierres = ft.Container(
@@ -139,6 +139,7 @@ def main(page: ft.Page):
             visible=False
         )
 
+        lista_activos_movil = ft.ListView([], expand=True, spacing=6)
         dt_activos = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("Cliente", weight=ft.FontWeight.BOLD)),
@@ -164,9 +165,9 @@ def main(page: ft.Page):
             content=ft.Column([
                 ft.Container(
                     content=ft.Column([
-                        ft.Text("🟢 Cobros del Día (Toca ✏️ para corregir)", size=13, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
+                        ft.Text("🟢 Cobros del Día", size=13, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
                         ft.Divider(color=C_GRIS_BORDE),
-                        ft.ListView([dt_activos], expand=True),
+                        lista_activos_movil if page.width <= 700 else ft.ListView([dt_activos], expand=True),
                     ], expand=True),
                     expand=3, padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 ),
@@ -504,6 +505,7 @@ def main(page: ft.Page):
 
         lbl_total_deudas_global = ft.Text("Pendiente Global: Q 0.00", size=13, weight=ft.FontWeight.BOLD, color=ft.colors.RED_700)
 
+        lista_deudas_movil = ft.ListView([], expand=True, spacing=6)
         dt_deudas = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD)),
@@ -525,7 +527,7 @@ def main(page: ft.Page):
                     ft.IconButton(icon=ft.icons.REFRESH, on_click=lambda e: cargar_tabla_deudas(), tooltip="Actualizar")
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Divider(color=C_GRIS_BORDE),
-                ft.ListView([dt_deudas], expand=True)
+                lista_deudas_movil if page.width <= 700 else ft.ListView([dt_deudas], expand=True)
             ], expand=True),
             padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO, expand=True
         )
@@ -568,8 +570,8 @@ def main(page: ft.Page):
                 dt_resumen_macro.rows = [
                     ft.DataRow(cells=[ft.DataCell(ft.Text("(+) Bruto Recaudado")), ft.DataCell(ft.Text(f"Q {t_ingresos:.2f}"))]),
                     ft.DataRow(cells=[ft.DataCell(ft.Text("(-) Egresos / Retiros")), ft.DataCell(ft.Text(f"Q {t_gastos:.2f}"))]),
-                    ft.DataCell(cells=[ft.DataCell(ft.Text("(=) SALDO NETO")), ft.DataCell(ft.Text(f"Q {balance_neto:.2f}", weight=ft.FontWeight.BOLD))]),
-                    ft.DataCell(cells=[ft.DataCell(ft.Text("(*) Por Cobrar (Fiado)")), ft.DataCell(ft.Text(f"Q {t_pendientes:.2f}"))]),
+                    ft.DataRow(cells=[ft.DataCell(ft.Text("(=) SALDO NETO")), ft.DataCell(ft.Text(f"Q {balance_neto:.2f}", weight=ft.FontWeight.BOLD))]),
+                    ft.DataRow(cells=[ft.DataCell(ft.Text("(*) Por Cobrar (Fiado)")), ft.DataCell(ft.Text(f"Q {t_pendientes:.2f}"))]),
                 ]
 
                 db.cursor.execute("""
@@ -853,8 +855,9 @@ def main(page: ft.Page):
                 mostrar_snack(f"Error en carrusel: {ex}", es_error=True)
 
         def cargar_tabla_activos_inactivos():
-            dt_activos.rows = []
-            dt_inactivos.rows = []
+            dt_activos.rows.clear()
+            lista_activos_movil.controls.clear()
+            dt_inactivos.rows.clear()
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
 
             try:
@@ -881,18 +884,39 @@ def main(page: ft.Page):
                             db.conn.rollback()
                             mostrar_snack(f"Error: {ex}", es_error=True)
 
-                    dt_activos.rows.append(
-                        ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(c_nombre, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(prod, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {pag:.1f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {pend:.1f}", color=ft.colors.RED_700 if pend > 0 else C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Row([
-                                ft.IconButton(icon=ft.icons.EDIT, icon_size=16, icon_color=C_CELESTE_PRINCIPAL, on_click=editar_venta_fn, tooltip="Editar"),
-                                ft.IconButton(icon=ft.icons.DELETE, icon_size=16, icon_color=ft.colors.RED_600, on_click=borrar_venta_fn, tooltip="Eliminar"),
-                            ], spacing=0))
-                        ])
-                    )
+                    if page.width <= 700:
+                        card_item = ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Text(f"{c_nombre}", weight=ft.FontWeight.BOLD, size=13, color=C_TEXTO_NEGRO),
+                                    ft.Text(f"Q {pag:.1f} (Debe: Q {pend:.1f})", weight=ft.FontWeight.BOLD, size=12, color=ft.colors.RED_700 if pend > 0 else C_CELESTE_PRINCIPAL)
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Text(f"Detalle: {prod}", size=11, color=ft.colors.GREY_700),
+                                ft.Row([
+                                    ft.IconButton(icon=ft.icons.EDIT, icon_size=16, icon_color=C_CELESTE_PRINCIPAL, on_click=editar_venta_fn, tooltip="Editar"),
+                                    ft.IconButton(icon=ft.icons.DELETE, icon_size=16, icon_color=ft.colors.RED_600, on_click=borrar_venta_fn, tooltip="Eliminar"),
+                                ], alignment=ft.MainAxisAlignment.END, spacing=0)
+                            ], spacing=2),
+                            padding=6,
+                            margin=ft.margin.symmetric(vertical=2),
+                            border=ft.border.all(1, C_GRIS_BORDE),
+                            border_radius=6,
+                            bgcolor=C_BLANCO
+                        )
+                        lista_activos_movil.controls.append(card_item)
+                    else:
+                        dt_activos.rows.append(
+                            ft.DataRow(cells=[
+                                ft.DataCell(ft.Text(c_nombre, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(prod, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {pag:.1f}", color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {pend:.1f}", color=ft.colors.RED_700 if pend > 0 else C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Row([
+                                    ft.IconButton(icon=ft.icons.EDIT, icon_size=16, icon_color=C_CELESTE_PRINCIPAL, on_click=editar_venta_fn, tooltip="Editar"),
+                                    ft.IconButton(icon=ft.icons.DELETE, icon_size=16, icon_color=ft.colors.RED_600, on_click=borrar_venta_fn, tooltip="Eliminar"),
+                                ], spacing=0))
+                            ])
+                        )
 
                 db.cursor.execute("""
                     SELECT b.id, c.nombre, b.motivo FROM blacklist b 
@@ -1070,7 +1094,8 @@ def main(page: ft.Page):
                 print(f"Error gastos: {ex}")
 
         def cargar_tabla_deudas():
-            dt_deudas.rows = []
+            dt_deudas.rows.clear()
+            lista_deudas_movil.controls.clear()
             try:
                 db.cursor.execute("""
                     SELECT v.id, v.fecha_corta, c.nombre, v.producto, v.total, v.pagado, v.pendiente 
@@ -1085,19 +1110,40 @@ def main(page: ft.Page):
                     def abono_fn(e, vid=v_id, cname=cliente, pend=pendiente):
                         abrir_dialogo_abono(vid, cname, pend)
 
-                    dt_deudas.rows.append(
-                        ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(str(v_id), color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(fecha, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(cliente, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(producto, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {total:.2f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {pagado:.2f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {pendiente:.2f}", color=ft.colors.RED_700, weight=ft.FontWeight.BOLD)),
-                            ft.DataCell(ft.ElevatedButton("💰", on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)),
-                        ])
-                    )
+                    if page.width <= 700:
+                        card_deuda = ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Text(f"{cliente}", weight=ft.FontWeight.BOLD, size=13, color=C_TEXTO_NEGRO),
+                                    ft.Text(f"Debe: Q {pendiente:.2f}", weight=ft.FontWeight.BOLD, size=13, color=ft.colors.RED_700)
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Text(f"Detalle: {producto} ({fecha})", size=11, color=ft.colors.GREY_700),
+                                ft.Row([
+                                    ft.ElevatedButton("💰 Abonar", icon=ft.icons.PAYMENTS, icon_size=14, on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
+                                ], alignment=ft.MainAxisAlignment.END)
+                            ], spacing=2),
+                            padding=6,
+                            margin=ft.margin.symmetric(vertical=2),
+                            border=ft.border.all(1, C_GRIS_BORDE),
+                            border_radius=6,
+                            bgcolor=C_BLANCO
+                        )
+                        lista_deudas_movil.controls.append(card_deuda)
+                    else:
+                        dt_deudas.rows.append(
+                            ft.DataRow(cells=[
+                                ft.DataCell(ft.Text(str(v_id), color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(fecha, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(cliente, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(producto, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {total:.2f}", color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {pagado:.2f}", color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {pendiente:.2f}", color=ft.colors.RED_700, weight=ft.FontWeight.BOLD)),
+                                ft.DataCell(ft.ElevatedButton("💰", on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)),
+                            ])
+                        )
                 lbl_total_deudas_global.value = f"Pendiente Global: Q {suma_global:.2f}"
+                page.update()
             except Exception as ex:
                 print(f"Error deudas: {ex}")
 
@@ -1221,8 +1267,12 @@ def main(page: ft.Page):
         def cambiar_pestana(e):
             idx = int(e.control.data)
             content_area.content = tab_views[idx]
-            if idx == 2:
+            if idx == 0:
+                cargar_tabla_activos_inactivos()
+            elif idx == 2:
                 cargar_tabla_clientes()
+            elif idx == 4:
+                cargar_tabla_deudas()
             
             all_btns = nav_buttons_pc.controls if page.width > 700 else (nav_row_1.controls + nav_row_2.controls)
             for i, btn in enumerate(all_btns):
@@ -1260,7 +1310,7 @@ def main(page: ft.Page):
             action_bar,
             menu_activo,
             ft.Container(content=content_area, expand=True)
-        ], expand=True, spacing=6)
+        ], expand=ThreadSpacer := True if False else True, spacing=6) # type: ignore
 
         page.clean()
         page.add(main_layout)
