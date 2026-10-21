@@ -513,7 +513,7 @@ def main(page: ft.Page):
 
         lbl_total_deudas_global = ft.Text("Pendiente Global: Q 0.00", size=13, weight=ft.FontWeight.BOLD, color=ft.colors.RED_700)
 
-        lista_deudas_movil = ft.ListView([], expand=True, spacing=6)
+        lista_deudas_movil = ft.Column([], expand=True, spacing=6, scroll=ft.ScrollMode.AUTO, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
         dt_deudas = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD)),
@@ -530,7 +530,7 @@ def main(page: ft.Page):
 
         # Vistas separadas para móvil y PC. Ambas se mantienen sincronizadas;
         # al cambiar el tamaño solo cambia cuál se muestra.
-        vista_deudas_movil = ft.Container(content=lista_deudas_movil, expand=True, visible=page.width <= 700)
+        vista_deudas_movil = ft.Container(content=lista_deudas_movil, expand=True, visible=page.width <= 700, padding=ft.padding.only(left=2, right=2, top=4, bottom=4) )
         vista_deudas_pc = ft.Container(content=ft.ListView([dt_deudas], expand=True), expand=True, visible=page.width > 700)
 
         tab_deudas = ft.Container(
@@ -1161,9 +1161,30 @@ def main(page: ft.Page):
                         ])
                     )
                 lbl_total_deudas_global.value = f"Pendiente Global: Q {suma_global:.2f}"
+                if not deudas:
+                    lista_deudas_movil.controls.append(
+                        ft.Container(
+                            content=ft.Text("No hay deudas pendientes.", size=14, color=C_TEXTO_NEGRO),
+                            padding=12,
+                            border=ft.border.all(1, C_GRIS_BORDE),
+                            border_radius=8,
+                            bgcolor=C_BLANCO,
+                        )
+                    )
                 page.update()
             except Exception as ex:
                 print(f"Error deudas: {ex}")
+                lista_deudas_movil.controls.clear()
+                lista_deudas_movil.controls.append(
+                    ft.Container(
+                        content=ft.Text("No se pudieron cargar las deudas. Revisa los Logs de Render.", size=13, color=ft.colors.RED_700),
+                        padding=12,
+                        border=ft.border.all(1, C_GRIS_BORDE),
+                        border_radius=8,
+                        bgcolor=C_BLANCO,
+                    )
+                )
+                page.update()
 
         def verificar_cierres_olvidados():
             hoy = datetime.date.today()
