@@ -69,8 +69,8 @@ class Database:
 def main(page: ft.Page):
     page.title = "Tienda Pantuj - Control Cloud"
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 8
-    page.spacing = 8
+    page.padding = 6
+    page.spacing = 6
     page.adaptive = True
 
     db = Database()
@@ -114,24 +114,24 @@ def main(page: ft.Page):
                 page.overlay.remove(dlg)
             page.update()
 
-        txt_titulo = ft.Text("🏪 Tienda Pantuj", size=18, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
-        lbl_fecha = ft.Text("", size=13, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
+        txt_titulo = ft.Text("🏪 Tienda Pantuj", size=16, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
+        lbl_fecha = ft.Text("", size=12, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
         
-        badge_estado = ft.Container(padding=ft.padding.symmetric(horizontal=6, vertical=2), border_radius=6)
-        lbl_badge_texto = ft.Text("", color=C_BLANCO, weight=ft.FontWeight.BOLD, size=10)
+        badge_estado = ft.Container(padding=ft.padding.symmetric(horizontal=4, vertical=2), border_radius=4)
+        lbl_badge_texto = ft.Text("", color=C_BLANCO, weight=ft.FontWeight.BOLD, size=9)
         badge_estado.content = lbl_badge_texto
 
-        lbl_caja_total = ft.Text("Caja: Q 0.00", size=15, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
-        lbl_banner_texto = ft.Text("", size=12, weight=ft.FontWeight.W_500, color=ft.colors.GREY_800)
+        lbl_caja_total = ft.Text("Caja: Q 0.00", size=14, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
+        lbl_banner_texto = ft.Text("", size=11, weight=ft.FontWeight.W_500, color=ft.colors.GREY_800)
         
         container_alerta_cierres = ft.Container(
             content=ft.Row([
-                ft.Icon(ft.icons.WARNING_AMBER_ROUNDED, color=ft.colors.WHITE, size=16),
-                ft.Text("⚠️ Días recientes sin cerrar caja.", color=ft.colors.WHITE, weight=ft.FontWeight.BOLD, size=11)
+                ft.Icon(ft.icons.WARNING_AMBER_ROUNDED, color=ft.colors.WHITE, size=14),
+                ft.Text("⚠️ Días recientes sin cerrar caja.", color=ft.colors.WHITE, weight=ft.FontWeight.BOLD, size=10)
             ], alignment=ft.MainAxisAlignment.CENTER),
             bgcolor=ft.colors.RED_800,
-            padding=4,
-            border_radius=6,
+            padding=3,
+            border_radius=4,
             visible=False
         )
 
@@ -139,8 +139,8 @@ def main(page: ft.Page):
             columns=[
                 ft.DataColumn(ft.Text("Cliente", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Detalle", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Real (Q)", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Debe (Q)", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Real", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Debe", weight=ft.FontWeight.BOLD)),
             ],
             rows=[]
         )
@@ -159,36 +159,36 @@ def main(page: ft.Page):
             content=ft.Column([
                 ft.Container(
                     content=ft.Column([
-                        ft.Text("🟢 Cobros del Día", size=14, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
+                        ft.Text("🟢 Cobros del Día", size=13, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.ListView([dt_activos], expand=True),
                     ], expand=True),
-                    height=240, padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    height=220, padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 ),
                 ft.Container(
                     content=ft.Column([
-                        ft.Text("⚫ Lista Negra / Ausentes", size=13, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
+                        ft.Text("⚫ Lista Negra / Ausentes", size=12, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.ListView([dt_inactivos], expand=True),
                     ], expand=True),
-                    height=200, padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    height=180, padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 )
-            ], spacing=8),
+            ], spacing=6),
             padding=2
         )
 
-        tf_fondo_base = ft.TextField(label="Fondo Inicial (Q)", width=160, keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
-        lbl_arqueo_fondo = ft.Text("Fondo Inicial: Q 0.00", size=12)
-        lbl_arqueo_ventas = ft.Text("Ventas Directas: Q 0.00", size=12)
-        lbl_arqueo_abonos = ft.Text("Abonos Cobrados: Q 0.00", size=12, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
-        lbl_arqueo_gastos = ft.Text("Retiros/Gastos: - Q 0.00", size=12, color=ft.colors.RED_700)
-        lbl_arqueo_total_fisico = ft.Text("TOTAL ESPERADO: Q 0.00", size=14, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
+        tf_fondo_base = ft.TextField(label="Fondo Inicial (Q)", width=150, keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
+        lbl_arqueo_fondo = ft.Text("Fondo Inicial: Q 0.00", size=11)
+        lbl_arqueo_ventas = ft.Text("Ventas Directas: Q 0.00", size=11)
+        lbl_arqueo_abonos = ft.Text("Abonos Cobrados: Q 0.00", size=11, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
+        lbl_arqueo_gastos = ft.Text("Retiros/Gastos: - Q 0.00", size=11, color=ft.colors.RED_700)
+        lbl_arqueo_total_fisico = ft.Text("TOTAL ESPERADO: Q 0.00", size=13, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
 
         dt_abonos_hoy = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("Cliente", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Concepto", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Monto (Q)", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Monto", weight=ft.FontWeight.BOLD)),
             ],
             rows=[]
         )
@@ -211,24 +211,24 @@ def main(page: ft.Page):
             content=ft.Column([
                 ft.Container(
                     content=ft.Column([
-                        ft.Text("💵 Base Inicial y Cuadre", size=14, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
+                        ft.Text("💵 Base Inicial y Cuadre", size=13, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.Row([tf_fondo_base, ft.ElevatedButton("Asignar", on_click=guardar_fondo_base, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)]),
                         ft.Divider(color=C_GRIS_BORDE),
                         lbl_arqueo_fondo, lbl_arqueo_ventas, lbl_arqueo_abonos, lbl_arqueo_gastos,
                         ft.Divider(color=C_GRIS_BORDE), lbl_arqueo_total_fisico
-                    ], spacing=6),
-                    padding=10, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    ], spacing=4),
+                    padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 ),
                 ft.Container(
                     content=ft.Column([
-                        ft.Text("💰 Abonos de Hoy", size=14, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
+                        ft.Text("💰 Abonos de Hoy", size=13, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.ListView([dt_abonos_hoy], expand=True)
                     ], expand=True),
-                    height=250, padding=10, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    height=200, padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 )
-            ], spacing=8),
+            ], spacing=6),
             padding=2
         )
 
@@ -237,6 +237,9 @@ def main(page: ft.Page):
         tf_cli_precio = ft.TextField(label="Tarifa Estándar (Q)", border_radius=8, keyboard_type=ft.KeyboardType.NUMBER)
         tf_cli_notas = ft.TextField(label="Notas / Contacto", multiline=True, min_lines=2, max_lines=3, border_radius=8)
         tf_cli_buscar = ft.TextField(label="🔍 Buscar Cliente", border_radius=8, expand=True, on_change=lambda e: cargar_tabla_clientes())
+
+        # Contenedor flexible para mostrar los clientes como lista limpia en celulares y tabla en PC
+        lista_clientes_movil = ft.ListView([], expand=True, spacing=6)
 
         dt_clientes = ft.DataTable(
             columns=[
@@ -252,7 +255,7 @@ def main(page: ft.Page):
         dialog_cliente = ft.AlertDialog(
             title=ft.Text("👤 Formulario de Cliente", weight=ft.FontWeight.BOLD),
             content=ft.Container(
-                content=ft.Column([tf_cli_nombre, tf_cli_servicio, tf_cli_precio, tf_cli_notas], width=320, height=250, spacing=8),
+                content=ft.Column([tf_cli_nombre, tf_cli_servicio, tf_cli_precio, tf_cli_notas], width=300, height=240, spacing=6),
                 padding=2
             ),
             actions=[]
@@ -267,12 +270,12 @@ def main(page: ft.Page):
             ],
             rows=[]
         )
-        lbl_hist_cli_info = ft.Text("", size=12, weight=ft.FontWeight.W_500)
+        lbl_hist_cli_info = ft.Text("", size=11, weight=ft.FontWeight.W_500)
 
         dialog_historial = ft.AlertDialog(
             title=ft.Text("📜 Historial", weight=ft.FontWeight.BOLD),
             content=ft.Container(
-                content=ft.Column([lbl_hist_cli_info, ft.Divider(color=C_GRIS_BORDE), ft.ListView([dt_historial_cli], expand=True)], width=340, height=300, spacing=6),
+                content=ft.Column([lbl_hist_cli_info, ft.Divider(color=C_GRIS_BORDE), ft.ListView([dt_historial_cli], expand=True)], width=320, height=280, spacing=4),
                 padding=2
             ),
             actions=[ft.TextButton("Cerrar", on_click=lambda e: cerrar_dialogo_seguro(dialog_historial))]
@@ -322,14 +325,12 @@ def main(page: ft.Page):
                     mostrar_snack("Cliente guardado.")
                 db.conn.commit()
                 
-                # Cierre seguro y actualización forzada para evitar pantalla blanca en móviles
                 cerrar_dialogo_seguro(dialog_cliente)
                 tf_cli_nombre.value = ""
                 tf_cli_servicio.value = ""
                 tf_cli_precio.value = ""
                 tf_cli_notas.value = ""
                 cargar_tabla_clientes()
-                page.update()
             except Exception as ex:
                 db.conn.rollback()
                 mostrar_snack(f"Error al guardar: {ex}", es_error=True)
@@ -366,11 +367,11 @@ def main(page: ft.Page):
                 ft.Row([
                     ft.ElevatedButton("➕ Agregar", icon=ft.icons.ADD, on_click=lambda e: abrir_modal_cliente(), bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO),
                     tf_cli_buscar
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, spacing=8),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, spacing=6),
                 ft.Divider(color=C_GRIS_BORDE),
-                ft.ListView([dt_clientes], expand=True)
+                lista_clientes_movil if page.width <= 700 else ft.ListView([dt_clientes], expand=True)
             ], expand=True),
-            padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+            padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
         )
 
         tf_gas_desc = ft.TextField(label="Descripción del Gasto", border_radius=8)
@@ -380,7 +381,7 @@ def main(page: ft.Page):
             columns=[
                 ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Descripción", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Monto (Q)", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Monto", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Acción", weight=ft.FontWeight.BOLD)),
             ],
             rows=[]
@@ -417,26 +418,26 @@ def main(page: ft.Page):
             content=ft.Column([
                 ft.Container(
                     content=ft.Column([
-                        ft.Text("💸 Salida de Efectivo", size=14, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
+                        ft.Text("💸 Salida de Efectivo", size=13, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
                         ft.Divider(color=C_GRIS_BORDE),
                         tf_gas_desc, tf_gas_monto,
                         ft.ElevatedButton("💾 Registrar Gasto", icon=ft.icons.MONEY_OFF, on_click=guardar_gasto_click, bgcolor=ft.colors.GREY_800, color=C_BLANCO)
-                    ], spacing=8),
-                    padding=10, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    ], spacing=6),
+                    padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 ),
                 ft.Container(
                     content=ft.Column([
-                        ft.Text("📋 Egresos de Hoy", size=14, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
+                        ft.Text("📋 Egresos de Hoy", size=13, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.ListView([dt_gastos], expand=True)
                     ], expand=True),
-                    height=240, padding=10, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    height=200, padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 )
-            ], spacing=8),
+            ], spacing=6),
             padding=2
         )
 
-        lbl_total_deudas_global = ft.Text("Pendiente Global: Q 0.00", size=14, weight=ft.FontWeight.BOLD, color=ft.colors.RED_700)
+        lbl_total_deudas_global = ft.Text("Pendiente Global: Q 0.00", size=13, weight=ft.FontWeight.BOLD, color=ft.colors.RED_700)
 
         dt_deudas = ft.DataTable(
             columns=[
@@ -461,7 +462,7 @@ def main(page: ft.Page):
                 ft.Divider(color=C_GRIS_BORDE),
                 ft.ListView([dt_deudas], expand=True)
             ], expand=True),
-            padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+            padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
         )
 
         tf_hist_inicio = ft.TextField(label="Desde (YYYY-MM-DD)", value=datetime.date.today().strftime("%Y-%m-01"), expand=True, border_radius=8)
@@ -470,7 +471,7 @@ def main(page: ft.Page):
         dt_resumen_macro = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("Concepto", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Monto (Q)", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Monto", weight=ft.FontWeight.BOLD)),
             ],
             rows=[]
         )
@@ -535,27 +536,27 @@ def main(page: ft.Page):
 
         tab_historial = ft.Container(
             content=ft.Column([
-                ft.Row([tf_hist_inicio, tf_hist_fin], spacing=6),
+                ft.Row([tf_hist_inicio, tf_hist_fin], spacing=4),
                 ft.ElevatedButton("📊 Procesar Reporte", icon=ft.icons.ANALYTICS, on_click=procesar_historial_rango, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO),
                 ft.Divider(color=C_GRIS_BORDE),
                 ft.Container(
-                    content=ft.Column([ft.Text("📊 Métricas", size=13, weight=ft.FontWeight.BOLD), dt_resumen_macro]),
-                    padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8
+                    content=ft.Column([ft.Text("📊 Métricas", size=12, weight=ft.FontWeight.BOLD), dt_resumen_macro]),
+                    padding=4, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8
                 ),
                 ft.Container(
-                    content=ft.Column([ft.Text("📅 Días en el Rango", size=13, weight=ft.FontWeight.BOLD), ft.ListView([dt_cronologico], expand=True)], expand=True),
-                    height=220, padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8
+                    content=ft.Column([ft.Text("📅 Días", size=12, weight=ft.FontWeight.BOLD), ft.ListView([dt_cronologico], expand=True)], expand=True),
+                    height=180, padding=4, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8
                 )
-            ], spacing=6),
+            ], spacing=4),
             padding=2
         )
 
         tf_abono_monto = ft.TextField(label="Monto de Abono (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
-        lbl_abono_info = ft.Text("", size=13, weight=ft.FontWeight.BOLD)
+        lbl_abono_info = ft.Text("", size=12, weight=ft.FontWeight.BOLD)
 
         dialog_abono = ft.AlertDialog(
             title=ft.Text("💰 Registrar Abono", weight=ft.FontWeight.BOLD),
-            content=ft.Column([lbl_abono_info, tf_abono_monto], height=110, spacing=8),
+            content=ft.Column([lbl_abono_info, tf_abono_monto], height=100, spacing=6),
             actions=[]
         )
 
@@ -602,23 +603,23 @@ def main(page: ft.Page):
             dialog_abono.open = True
             page.update()
 
-        lbl_car_idx = ft.Text("", size=11, italic=True)
-        lbl_car_name = ft.Text("", size=16, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
-        lbl_car_info = ft.Text("", size=12)
-        lbl_car_alerta = ft.Text("", size=11, color=ft.colors.RED_700, weight=ft.FontWeight.BOLD)
+        lbl_car_idx = ft.Text("", size=10, italic=True)
+        lbl_car_name = ft.Text("", size=15, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
+        lbl_car_info = ft.Text("", size=11)
+        lbl_car_alerta = ft.Text("", size=10, color=ft.colors.RED_700, weight=ft.FontWeight.BOLD)
 
         tf_car_desc = ft.TextField(label="Detalle del Trabajo", border_radius=8)
         tf_car_total = ft.TextField(label="Total (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
         tf_car_pago = ft.TextField(label="Efectivo en Caja (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
         tf_car_abono_v = ft.TextField(label="Abono a Deuda Anterior (Q)", value="0.00", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
 
-        col_form_carrusel = ft.Column([tf_car_desc, tf_car_total, tf_car_pago, lbl_car_alerta, tf_car_abono_v], visible=False, spacing=6)
-        col_preg_carrusel = ft.Column([], visible=True, spacing=6)
+        col_form_carrusel = ft.Column([tf_car_desc, tf_car_total, tf_car_pago, lbl_car_alerta, tf_car_abono_v], visible=False, spacing=4)
+        col_preg_carrusel = ft.Column([], visible=True, spacing=4)
 
         dialog_carrusel = ft.AlertDialog(
             title=ft.Row([ft.Text("⚡ Carrusel", weight=ft.FontWeight.BOLD), lbl_car_idx], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             content=ft.Container(
-                content=ft.Column([lbl_car_name, lbl_car_info, ft.Divider(color=C_GRIS_BORDE), col_preg_carrusel, col_form_carrusel], width=300, height=320, spacing=6),
+                content=ft.Column([lbl_car_name, lbl_car_info, ft.Divider(color=C_GRIS_BORDE), col_preg_carrusel, col_form_carrusel], width=280, height=300, spacing=4),
                 padding=2
             ),
             actions=[]
@@ -801,8 +802,8 @@ def main(page: ft.Page):
                         ft.DataRow(cells=[
                             ft.DataCell(ft.Text(r[1], color=C_TEXTO_NEGRO)),
                             ft.DataCell(ft.Text(r[2], color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {r[3]:.2f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {r[4]:.2f}", color=ft.colors.RED_700 if r[4] > 0 else C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Text(f"Q {r[3]:.1f}", color=C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Text(f"Q {r[4]:.1f}", color=ft.colors.RED_700 if r[4] > 0 else C_TEXTO_NEGRO)),
                         ])
                     )
 
@@ -883,6 +884,7 @@ def main(page: ft.Page):
 
         def cargar_tabla_clientes():
             dt_clientes.rows.clear()
+            lista_clientes_movil.controls.clear()
             busqueda = f"%{tf_cli_buscar.value.strip()}%" if tf_cli_buscar.value else "%"
             try:
                 db.cursor.execute("SELECT id, nombre, servicio, precio, notas FROM clientes WHERE nombre ILIKE %s ORDER BY nombre ASC", (busqueda,))
@@ -908,19 +910,42 @@ def main(page: ft.Page):
                     def ver_hist_fn(e, cid=c_id, n=nombre, nt=notas):
                         ver_historial_cliente(cid, n, nt)
 
-                    nuevas_filas.append(
-                        ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(str(c_id), color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(nombre, color=C_TEXTO_NEGRO, weight=ft.FontWeight.BOLD)),
-                            ft.DataCell(ft.Text(servicio, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {precio:.2f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Row([
-                                ft.IconButton(icon=ft.icons.REMOVE_RED_EYE, icon_color=C_CELESTE_PRINCIPAL, on_click=ver_hist_fn, tooltip="Historial"),
-                                ft.IconButton(icon=ft.icons.EDIT, icon_color=ft.colors.GREY_700, on_click=editar_fn, tooltip="Editar"),
-                                ft.IconButton(icon=ft.icons.DELETE, icon_color=ft.colors.RED_600, on_click=borrar_fn, tooltip="Eliminar"),
-                            ], spacing=0)),
-                        ])
-                    )
+                    # Si es móvil, generamos una tarjeta en la lista vertical con botones claros
+                    if page.width <= 700:
+                        card_item = ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Text(f"#{c_id} - {nombre}", weight=ft.FontWeight.BOLD, size=13, color=C_TEXTO_NEGRO),
+                                    ft.Text(f"Q {precio:.2f}", weight=ft.FontWeight.BOLD, size=13, color=C_CELESTE_PRINCIPAL)
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Text(f"Servicio: {servicio}", size=11, color=ft.colors.GREY_700),
+                                ft.Row([
+                                    ft.IconButton(icon=ft.icons.REMOVE_RED_EYE, icon_size=16, icon_color=C_CELESTE_PRINCIPAL, on_click=ver_hist_fn, tooltip="Historial"),
+                                    ft.IconButton(icon=ft.icons.EDIT, icon_size=16, icon_color=ft.colors.GREY_700, on_click=editar_fn, tooltip="Editar"),
+                                    ft.IconButton(icon=ft.icons.DELETE, icon_size=16, icon_color=ft.colors.RED_600, on_click=borrar_fn, tooltip="Eliminar"),
+                                ], alignment=ft.MainAxisAlignment.END, spacing=0)
+                            ], spacing=2),
+                            padding=6,
+                            margin=ft.margin.symmetric(vertical=2),
+                            border=ft.border.all(1, C_GRIS_BORDE),
+                            border_radius=6,
+                            bgcolor=C_BLANCO
+                        )
+                        lista_clientes_movil.controls.append(card_item)
+                    else:
+                        nuevas_filas.append(
+                            ft.DataRow(cells=[
+                                ft.DataCell(ft.Text(str(c_id), color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(nombre, color=C_TEXTO_NEGRO, weight=ft.FontWeight.BOLD)),
+                                ft.DataCell(ft.Text(servicio, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {precio:.2f}", color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Row([
+                                    ft.IconButton(icon=ft.icons.REMOVE_RED_EYE, icon_color=C_CELESTE_PRINCIPAL, on_click=ver_hist_fn, tooltip="Historial"),
+                                    ft.IconButton(icon=ft.icons.EDIT, icon_color=ft.colors.GREY_700, on_click=editar_fn, tooltip="Editar"),
+                                    ft.IconButton(icon=ft.icons.DELETE, icon_color=ft.colors.RED_600, on_click=borrar_fn, tooltip="Eliminar"),
+                                ], spacing=0)),
+                            ])
+                        )
                 dt_clientes.rows = nuevas_filas
                 page.update()
             except Exception as ex:
@@ -1083,9 +1108,9 @@ def main(page: ft.Page):
             content=ft.Row([
                 txt_titulo,
                 ft.Row([
-                    ft.IconButton(icon=ft.icons.ARROW_BACK_IOS, icon_size=14, on_click=lambda e: cambiar_dia(-1)),
+                    ft.IconButton(icon=ft.icons.ARROW_BACK_IOS, icon_size=12, on_click=lambda e: cambiar_dia(-1)),
                     lbl_fecha,
-                    ft.IconButton(icon=ft.icons.ARROW_FORWARD_IOS, icon_size=14, on_click=lambda e: cambiar_dia(1)),
+                    ft.IconButton(icon=ft.icons.ARROW_FORWARD_IOS, icon_size=12, on_click=lambda e: cambiar_dia(1)),
                     badge_estado,
                 ], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
                 lbl_caja_total
@@ -1107,14 +1132,12 @@ def main(page: ft.Page):
             if idx == 2:
                 cargar_tabla_clientes()
             
-            # Actualizamos colores según el tipo de menú activo
             all_btns = nav_buttons_pc.controls if page.width > 700 else (nav_row_1.controls + nav_row_2.controls)
             for i, btn in enumerate(all_btns):
                 btn.bgcolor = C_CELESTE_PRINCIPAL if i == idx else C_GRIS_FONDO
                 btn.color = C_BLANCO if i == idx else C_TEXTO_NEGRO
             page.update()
 
-        # Menú para Computadora (En una sola línea horizontal elegante)
         nav_buttons_pc = ft.Row([
             ft.ElevatedButton("📊 Hoy", on_click=cambiar_pestana, data=0, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO),
             ft.ElevatedButton("💵 Caja", on_click=cambiar_pestana, data=1, bgcolor=C_GRIS_FONDO, color=C_TEXTO_NEGRO),
@@ -1124,7 +1147,6 @@ def main(page: ft.Page):
             ft.ElevatedButton("📋 Reportes", on_click=cambiar_pestana, data=5, bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO),
         ], spacing=6)
 
-        # Menú para Celular (En 2 filas fijas para evitar cortes)
         nav_row_1 = ft.Row([
             ft.ElevatedButton("📊 Hoy", on_click=cambiar_pestana, data=0, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO, expand=True),
             ft.ElevatedButton("💵 Caja", on_click=cambiar_pestana, data=1, bgcolor=C_GRIS_FONDO, color=C_TEXTO_NEGRO, expand=True),
@@ -1138,18 +1160,15 @@ def main(page: ft.Page):
         ], spacing=4)
 
         nav_container_mobile = ft.Column([nav_row_1, nav_row_2], spacing=4)
-
-        # Selector inteligente según el ancho de pantalla (PC vs Celular)
         menu_activo = nav_buttons_pc if page.width > 700 else nav_container_mobile
 
-        # Contenedor principal con Scroll vertical estilo PDF para el celular
         main_scroll_container = ft.ListView([
             header_bar,
             container_alerta_cierres,
             action_bar,
             menu_activo,
-            ft.Container(content=content_area, expand=True, height=500)
-        ], expand=True, spacing=8)
+            ft.Container(content=content_area, expand=True, height=480)
+        ], expand=True, spacing=6)
 
         page.clean()
         page.add(main_scroll_container)
