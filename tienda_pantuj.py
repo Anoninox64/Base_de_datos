@@ -10,13 +10,19 @@ import flet as ft
 # ==========================================================================
 class Database:
     def __init__(self):
-        self.db_url = "postgresql://neondb_owner:npg_k95jPxErNLgZ@ep-holy-cherry-b8dz8gf1.c-14.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+        self.db_url = os.environ.get("DATABASE_URL", "").strip()
+        self.conn = None
+        self.cursor = None
+        if not self.db_url:
+            raise RuntimeError("Falta configurar DATABASE_URL con la cadena de conexión de Neon.")
         try:
-            self.conn = psycopg2.connect(self.db_url)
+            self.conn = psycopg2.connect(self.db_url, connect_timeout=10)
             self.cursor = self.conn.cursor()
             self.crear_tablas()
         except Exception as e:
-            print(f"Error de conexión a Neon: {e}")
+            if self.conn:
+                self.conn.close()
+            raise RuntimeError(f"No se pudo conectar con Neon: {e}") from e
 
     def crear_tablas(self):
         try:
@@ -112,11 +118,9 @@ def main(page: ft.Page):
         def cerrar_dialogo_seguro(dlg):
             try:
                 dlg.open = False
-                if dlg in page.overlay:
-                    page.overlay.remove(dlg)
                 page.update()
-            except Exception:
-                pass
+            except Exception as ex:
+                print(f"No se pudo cerrar el diálogo: {ex}")
 
         txt_titulo = ft.Text("🏪 Tienda Pantuj", size=15, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
         lbl_fecha = ft.Text("", size=11, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
@@ -237,7 +241,8 @@ def main(page: ft.Page):
                 ft.TextButton("Cancelar", on_click=lambda e: cerrar_dialogo_seguro(dialog_editar_venta)),
                 ft.ElevatedButton("Guardar", on_click=guardar_edicion_venta, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
             ]
-            page.overlay.append(dialog_editar_venta)
+            if dialog_editar_venta not in page.overlay:
+                page.overlay.append(dialog_editar_venta)
             dialog_editar_venta.open = True
             page.update()
 
@@ -361,7 +366,8 @@ def main(page: ft.Page):
                 ft.TextButton("Cancelar", on_click=lambda e: cerrar_dialogo_seguro(dialog_cliente)),
                 ft.ElevatedButton("Guardar", on_click=ejecutar_guardar_cliente, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
             ]
-            page.overlay.append(dialog_cliente)
+            if dialog_cliente not in page.overlay:
+                page.overlay.append(dialog_cliente)
             dialog_cliente.open = True
             page.update()
 
@@ -424,7 +430,8 @@ def main(page: ft.Page):
                                 ft.DataCell(ft.Text(f"Q {v[3]:.2f}", color=ft.colors.RED_700 if v[3] > 0 else ft.colors.GREEN_700)),
                             ])
                         )
-                page.overlay.append(dialog_historial)
+                if dialog_historial not in page.overlay:
+                    page.overlay.append(dialog_historial)
                 dialog_historial.open = True
                 page.update()
             except Exception as ex:
@@ -460,6 +467,9 @@ def main(page: ft.Page):
                 mostrar_snack("Caja congelada hoy.", es_error=True)
                 return
             desc = tf_gas_desc.value.strip() if tf_gas_desc.value else ""
+            if not desc:
+                mostrar_snack("Escribe la descripción del gasto.", es_error=True)
+                return
             try:
                 monto = float(tf_gas_monto.value) if tf_gas_monto.value else 0.0
                 if monto <= 0:
@@ -634,10 +644,13 @@ def main(page: ft.Page):
             def ejecutar_abono(e):
                 try:
                     abono = float(tf_abono_monto.value)
-                    if abono <= 0 or abono > pendiente_actual:
+                    db.cursor.execute("SELECT pendiente FROM ventas WHERE id=%s", (v_id,))
+                    fila_saldo = db.cursor.fetchone()
+                    saldo_actual = float(fila_saldo[0]) if fila_saldo else 0.0
+                    if abono <= 0 or abono > saldo_actual:
                         raise ValueError()
-                except ValueError:
-                    mostrar_snack("Monto inválido o mayor al saldo.", es_error=True)
+                except (ValueError, TypeError):
+                    mostrar_snack("Monto inválido o mayor al saldo actual.", es_error=True)
                     return
 
                 fecha_str = estado["fecha"].strftime("%Y-%m-%d")
@@ -666,7 +679,8 @@ def main(page: ft.Page):
                 ft.TextButton("Cancelar", on_click=lambda e: cerrar_dialogo_seguro(dialog_abono)),
                 ft.ElevatedButton("Aplicar", on_click=ejecutar_abono, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
             ]
-            page.overlay.append(dialog_abono)
+            if dialog_abono not in page.overlay:
+                page.overlay.append(dialog_abono)
             dialog_abono.open = True
             page.update()
 
@@ -762,7 +776,7 @@ def main(page: ft.Page):
                 pag = float(tf_car_pago.value)
                 abono_v = float(tf_car_abono_v.value) if (estado["tiene_deuda_previa"] and tf_car_abono_v.value) else 0.0
 
-                if tot < 0 or pag < 0 or abono_v < 0:
+                if tot < 0 or pag < 0 or pag > tot or abono_v < 0:
                     raise ValueError()
             except ValueError:
                 mostrar_snack("Valores numéricos inválidos.", es_error=True)
@@ -848,7 +862,8 @@ def main(page: ft.Page):
                     return
 
                 estado["carrusel_idx"] = 0
-                page.overlay.append(dialog_carrusel)
+                if dialog_carrusel not in page.overlay:
+                    page.overlay.append(dialog_carrusel)
                 dialog_carrusel.open = True
                 cargar_cliente_carrusel()
             except Exception as ex:
@@ -1325,7 +1340,7 @@ def main(page: ft.Page):
         usuario = tf_user.value.strip() if tf_user.value else ""
         password = tf_pass.value.strip() if tf_pass.value else ""
         
-        if usuario == "admin" and password == "pantuj2026":
+        if usuario == os.environ.get("APP_USER", "admin") and password == os.environ.get("APP_PASSWORD", "pantuj2026"):
             iniciar_sistema_tienda()
         else:
             lbl_error_login.value = "❌ Credenciales incorrectas"
