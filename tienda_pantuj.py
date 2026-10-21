@@ -10,11 +10,9 @@ import flet as ft
 # ==========================================================================
 class Database:
     def __init__(self):
-        self.db_url = os.environ.get("DATABASE_URL", "").strip()
+        self.db_url = "postgresql://neondb_owner:npg_k95jPxErNLgZ@ep-holy-cherry-b8dz8gf1.c-14.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
         self.conn = None
         self.cursor = None
-        if not self.db_url:
-            raise RuntimeError("Falta configurar DATABASE_URL con la cadena de conexión de Neon.")
         try:
             self.conn = psycopg2.connect(self.db_url, connect_timeout=10)
             self.cursor = self.conn.cursor()
