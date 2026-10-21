@@ -100,7 +100,8 @@ def main(page: ft.Page):
             "carrusel_list": [],
             "carrusel_idx": 0,
             "tiene_deuda_previa": False,
-            "edit_client_id": None
+            "edit_client_id": None,
+            "edit_venta_id": None
         }
 
         def es_dia_congelado():
@@ -109,10 +110,13 @@ def main(page: ft.Page):
             return db.cursor.fetchone() is not None
 
         def cerrar_dialogo_seguro(dlg):
-            dlg.open = False
-            if dlg in page.overlay:
-                page.overlay.remove(dlg)
-            page.update()
+            try:
+                dlg.open = False
+                if dlg in page.overlay:
+                    page.overlay.remove(dlg)
+                page.update()
+            except Exception:
+                pass
 
         txt_titulo = ft.Text("🏪 Tienda Pantuj", size=16, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
         lbl_fecha = ft.Text("", size=12, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
@@ -141,6 +145,7 @@ def main(page: ft.Page):
                 ft.DataColumn(ft.Text("Detalle", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Real", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Debe", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Acción", weight=ft.FontWeight.BOLD)),
             ],
             rows=[]
         )
@@ -159,7 +164,7 @@ def main(page: ft.Page):
             content=ft.Column([
                 ft.Container(
                     content=ft.Column([
-                        ft.Text("🟢 Cobros del Día", size=13, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
+                        ft.Text("🟢 Cobros del Día (Toca ✏️ para corregir)", size=13, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.ListView([dt_activos], expand=True),
                     ], expand=True),
@@ -176,6 +181,64 @@ def main(page: ft.Page):
             ], expand=True, spacing=6),
             padding=2, expand=True
         )
+
+        tf_edit_v_prod = ft.TextField(label="Detalle / Producto", border_radius=8)
+        tf_edit_v_pagado = ft.TextField(label="Pagado / Real (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
+        tf_edit_v_pendiente = ft.TextField(label="Pendiente / Debe (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
+        lbl_edit_v_info = ft.Text("", size=12, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
+
+        dialog_editar_venta = ft.AlertDialog(
+            title=ft.Text("✏️ Modificar Cobro del Día", weight=ft.FontWeight.BOLD),
+            content=ft.Container(
+                content=ft.Column([lbl_edit_v_info, tf_edit_v_prod, tf_edit_v_pagado, tf_edit_v_pendiente], width=300, height=220, spacing=6),
+                padding=2
+            ),
+            actions=[]
+        )
+
+        def abrir_modal_editar_venta(v_id, cliente_nombre, prod, pagado, pendiente):
+            if es_dia_congelado():
+                mostrar_snack("Caja congelada hoy. No se puede modificar.", es_error=True)
+                return
+            cerrar_dialogo_seguro(dialog_editar_venta)
+            estado["edit_venta_id"] = v_id
+            lbl_edit_v_info.value = f"Cliente: {cliente_nombre}"
+            tf_edit_v_prod.value = prod
+            tf_edit_v_pagado.value = str(pagado)
+            tf_edit_v_pendiente.value = str(pendiente)
+
+            def guardar_edicion_venta(e):
+                try:
+                    p_nuevo = float(tf_edit_v_pagado.value)
+                    pend_nuevo = float(tf_edit_v_pendiente.value)
+                    if p_nuevo < 0 or pend_nuevo < 0:
+                        raise ValueError()
+                except ValueError:
+                    mostrar_snack("Los montos deben ser numéricos válidos.", es_error=True)
+                    return
+
+                prod_nuevo = tf_edit_v_prod.value.strip()
+                total_nuevo = p_nuevo + pend_nuevo
+
+                try:
+                    db.cursor.execute("""
+                        UPDATE ventas SET producto=%s, total=%s, pagado=%s, pendiente=%s WHERE id=%s
+                    """, (prod_nuevo, total_nuevo, p_nuevo, pend_nuevo, estado["edit_venta_id"]))
+                    db.conn.commit()
+                    cerrar_dialogo_seguro(dialog_editar_venta)
+                    mostrar_snack("Cobro actualizado correctamente.")
+                    refrescar_pantallas()
+                except Exception as ex:
+                    db.conn.rollback()
+                    mostrar_snack(f"Error al actualizar: {ex}", es_error=True)
+
+            dialog_editar_venta.actions = [
+                ft.TextButton("Cancelar", on_click=lambda e: cerrar_dialogo_seguro(dialog_editar_venta)),
+                ft.ElevatedButton("Guardar", on_click=guardar_edicion_venta, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
+            ]
+            page.overlay.append(dialog_editar_venta)
+            dialog_editar_venta.open = True
+            page.update()
 
         tf_fondo_base = ft.TextField(label="Fondo Inicial (Q)", width=150, keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
         lbl_arqueo_fondo = ft.Text("Fondo Inicial: Q 0.00", size=11)
@@ -328,18 +391,13 @@ def main(page: ft.Page):
                     mostrar_snack("Cliente guardado.")
                 db.conn.commit()
                 
-                # Cierre totalmente seguro y limpieza de overlay para evitar pantalla blanca en móviles
-                dialog_cliente.open = False
-                if dialog_cliente in page.overlay:
-                    page.overlay.remove(dialog_cliente)
-                
+                cerrar_dialogo_seguro(dialog_cliente)
                 tf_cli_nombre.value = ""
                 tf_cli_servicio.value = ""
                 tf_cli_precio.value = ""
                 tf_cli_notas.value = ""
                 
                 cargar_tabla_clientes()
-                page.update()
             except Exception as ex:
                 db.conn.rollback()
                 mostrar_snack(f"Error al guardar: {ex}", es_error=True)
@@ -510,8 +568,8 @@ def main(page: ft.Page):
                 dt_resumen_macro.rows = [
                     ft.DataRow(cells=[ft.DataCell(ft.Text("(+) Bruto Recaudado")), ft.DataCell(ft.Text(f"Q {t_ingresos:.2f}"))]),
                     ft.DataRow(cells=[ft.DataCell(ft.Text("(-) Egresos / Retiros")), ft.DataCell(ft.Text(f"Q {t_gastos:.2f}"))]),
-                    ft.DataRow(cells=[ft.DataCell(ft.Text("(=) SALDO NETO")), ft.DataCell(ft.Text(f"Q {balance_neto:.2f}", weight=ft.FontWeight.BOLD))]),
-                    ft.DataRow(cells=[ft.DataCell(ft.Text("(*) Por Cobrar (Fiado)")), ft.DataCell(ft.Text(f"Q {t_pendientes:.2f}"))]),
+                    ft.DataCell(cells=[ft.DataCell(ft.Text("(=) SALDO NETO")), ft.DataCell(ft.Text(f"Q {balance_neto:.2f}", weight=ft.FontWeight.BOLD))]),
+                    ft.DataCell(cells=[ft.DataCell(ft.Text("(*) Por Cobrar (Fiado)")), ft.DataCell(ft.Text(f"Q {t_pendientes:.2f}"))]),
                 ]
 
                 db.cursor.execute("""
@@ -635,7 +693,7 @@ def main(page: ft.Page):
         def cargar_cliente_carrusel():
             if not estado["carrusel_list"] or estado["carrusel_idx"] >= len(estado["carrusel_list"]):
                 cerrar_dialogo_seguro(dialog_carrusel)
-                mostrar_snack("¡Clientes de hoy procesados!")
+                mostrar_snack("🎉 ¡Clientes de hoy procesados!")
                 refrescar_pantallas()
                 return
 
@@ -805,12 +863,34 @@ def main(page: ft.Page):
                     FROM ventas v JOIN clientes c ON v.cliente_id = c.id WHERE v.fecha_corta=%s
                 """, (fecha_str,))
                 for r in db.cursor.fetchall():
+                    v_id, c_nombre, prod, pag, pend = r
+
+                    def editar_venta_fn(e, vid=v_id, name=c_nombre, p=prod, pg=pag, pn=pend):
+                        abrir_modal_editar_venta(vid, name, p, pg, pn)
+
+                    def borrar_venta_fn(e, vid=v_id, name=c_nombre):
+                        if es_dia_congelado():
+                            mostrar_snack("Caja congelada hoy.", es_error=True)
+                            return
+                        try:
+                            db.cursor.execute("DELETE FROM ventas WHERE id=%s", (vid,))
+                            db.conn.commit()
+                            mostrar_snack(f"Registro de '{name}' eliminado.")
+                            refrescar_pantallas()
+                        except Exception as ex:
+                            db.conn.rollback()
+                            mostrar_snack(f"Error: {ex}", es_error=True)
+
                     dt_activos.rows.append(
                         ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(r[1], color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(r[2], color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {r[3]:.1f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {r[4]:.1f}", color=ft.colors.RED_700 if r[4] > 0 else C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Text(c_nombre, color=C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Text(prod, color=C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Text(f"Q {pag:.1f}", color=C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Text(f"Q {pend:.1f}", color=ft.colors.RED_700 if pend > 0 else C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Row([
+                                ft.IconButton(icon=ft.icons.EDIT, icon_size=16, icon_color=C_CELESTE_PRINCIPAL, on_click=editar_venta_fn, tooltip="Editar"),
+                                ft.IconButton(icon=ft.icons.DELETE, icon_size=16, icon_color=ft.colors.RED_600, on_click=borrar_venta_fn, tooltip="Eliminar"),
+                            ], spacing=0))
                         ])
                     )
 
@@ -1037,9 +1117,8 @@ def main(page: ft.Page):
                 print(f"Error cierres: {ex}")
 
         def refrescar_pantallas(e=None):
-            # Reconecta o reejecuta consultas por si hubo cambios en otro dispositivo (Sincronización en vivo)
             try:
-                db.conn.rollback() # Limpia transacciones pendientes y actualiza vista con datos remotos
+                db.conn.rollback()
             except:
                 pass
 
@@ -1068,7 +1147,6 @@ def main(page: ft.Page):
             cargar_datos_caja()
             cargar_tabla_gastos()
             cargar_tabla_deudas()
-            mostrar_snack("🔄 Datos sincronizados", es_error=False)
             page.update()
 
         def cambiar_dia(delta):
@@ -1176,7 +1254,6 @@ def main(page: ft.Page):
         nav_container_mobile = ft.Column([nav_row_1, nav_row_2], spacing=4)
         menu_activo = nav_buttons_pc if page.width > 700 else nav_container_mobile
 
-        # Contenedor optimizado adaptativo que evita espacios en blanco muertos en PC
         main_layout = ft.Column([
             header_bar,
             container_alerta_cierres,
