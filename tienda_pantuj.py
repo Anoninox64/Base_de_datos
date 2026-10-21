@@ -528,6 +528,11 @@ def main(page: ft.Page):
             rows=[]
         )
 
+        # Vistas separadas para móvil y PC. Ambas se mantienen sincronizadas;
+        # al cambiar el tamaño solo cambia cuál se muestra.
+        vista_deudas_movil = ft.Container(content=lista_deudas_movil, expand=True, visible=page.width <= 700)
+        vista_deudas_pc = ft.Container(content=ft.ListView([dt_deudas], expand=True), expand=True, visible=page.width > 700)
+
         tab_deudas = ft.Container(
             content=ft.Column([
                 ft.Row([
@@ -535,7 +540,8 @@ def main(page: ft.Page):
                     ft.IconButton(icon=ft.icons.REFRESH, on_click=lambda e: cargar_tabla_deudas(), tooltip="Actualizar")
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Divider(color=C_GRIS_BORDE),
-                lista_deudas_movil if page.width <= 700 else ft.ListView([dt_deudas], expand=True)
+                vista_deudas_movil,
+                vista_deudas_pc,
             ], expand=True),
             padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO, expand=True
         )
@@ -1123,38 +1129,37 @@ def main(page: ft.Page):
                     def abono_fn(e, vid=v_id, cname=cliente, pend=pendiente):
                         abrir_dialogo_abono(vid, cname, pend)
 
-                    if page.width <= 700:
-                        card_deuda = ft.Container(
-                            content=ft.Column([
-                                ft.Row([
-                                    ft.Text(f"{cliente}", weight=ft.FontWeight.BOLD, size=13, color=C_TEXTO_NEGRO),
-                                    ft.Text(f"Debe: Q {pendiente:.2f}", weight=ft.FontWeight.BOLD, size=13, color=ft.colors.RED_700)
-                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                ft.Text(f"Detalle: {producto} ({fecha})", size=11, color=ft.colors.GREY_700),
-                                ft.Row([
-                                    ft.ElevatedButton("💰 Abonar", icon=ft.icons.PAYMENTS, icon_size=14, on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
-                                ], alignment=ft.MainAxisAlignment.END)
-                            ], spacing=2),
-                            padding=6,
-                            margin=ft.margin.symmetric(vertical=2),
-                            border=ft.border.all(1, C_GRIS_BORDE),
-                            border_radius=6,
-                            bgcolor=C_BLANCO
-                        )
-                        lista_deudas_movil.controls.append(card_deuda)
-                    else:
-                        dt_deudas.rows.append(
-                            ft.DataRow(cells=[
-                                ft.DataCell(ft.Text(str(v_id), color=C_TEXTO_NEGRO)),
-                                ft.DataCell(ft.Text(fecha, color=C_TEXTO_NEGRO)),
-                                ft.DataCell(ft.Text(cliente, color=C_TEXTO_NEGRO)),
-                                ft.DataCell(ft.Text(producto, color=C_TEXTO_NEGRO)),
-                                ft.DataCell(ft.Text(f"Q {total:.2f}", color=C_TEXTO_NEGRO)),
-                                ft.DataCell(ft.Text(f"Q {pagado:.2f}", color=C_TEXTO_NEGRO)),
-                                ft.DataCell(ft.Text(f"Q {pendiente:.2f}", color=ft.colors.RED_700, weight=ft.FontWeight.BOLD)),
-                                ft.DataCell(ft.ElevatedButton("💰", on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)),
-                            ])
-                        )
+                    card_deuda = ft.Container(
+                        content=ft.Column([
+                            ft.Row([
+                                ft.Text(f"{cliente}", weight=ft.FontWeight.BOLD, size=13, color=C_TEXTO_NEGRO),
+                                ft.Text(f"Debe: Q {pendiente:.2f}", weight=ft.FontWeight.BOLD, size=13, color=ft.colors.RED_700)
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                            ft.Text(f"Detalle: {producto} ({fecha})", size=11, color=ft.colors.GREY_700),
+                            ft.Row([
+                                ft.ElevatedButton("💰 Abonar", icon=ft.icons.PAYMENTS, icon_size=14, on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
+                            ], alignment=ft.MainAxisAlignment.END)
+                        ], spacing=2),
+                        padding=6,
+                        margin=ft.margin.symmetric(vertical=2),
+                        border=ft.border.all(1, C_GRIS_BORDE),
+                        border_radius=6,
+                        bgcolor=C_BLANCO
+                    )
+                    lista_deudas_movil.controls.append(card_deuda)
+                    # También rellenar la tabla de PC aunque esté oculta.
+                    dt_deudas.rows.append(
+                        ft.DataRow(cells=[
+                            ft.DataCell(ft.Text(str(v_id), color=C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Text(fecha, color=C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Text(cliente, color=C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Text(producto, color=C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Text(f"Q {total:.2f}", color=C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Text(f"Q {pagado:.2f}", color=C_TEXTO_NEGRO)),
+                            ft.DataCell(ft.Text(f"Q {pendiente:.2f}", color=ft.colors.RED_700, weight=ft.FontWeight.BOLD)),
+                            ft.DataCell(ft.ElevatedButton("💰", on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)),
+                        ])
+                    )
                 lbl_total_deudas_global.value = f"Pendiente Global: Q {suma_global:.2f}"
                 page.update()
             except Exception as ex:
@@ -1326,6 +1331,13 @@ def main(page: ft.Page):
         # ✅ LÍNEA CORREGIDA
               ], expand=True, spacing=6)
 
+        def ajustar_vista_por_tamano(e=None):
+            es_movil = page.width <= 700
+            vista_deudas_movil.visible = es_movil
+            vista_deudas_pc.visible = not es_movil
+            page.update()
+
+        page.on_resize = ajustar_vista_por_tamano
         page.clean()
         page.add(main_layout)
         refrescar_pantallas()
