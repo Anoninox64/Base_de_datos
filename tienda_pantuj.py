@@ -72,8 +72,6 @@ def main(page: ft.Page):
     page.padding = 6
     page.spacing = 6
     page.adaptive = True  # Habilita el comportamiento adaptativo para móviles
-    
-    # Eliminamos window.width y window.height fijos para que el navegador móvil controle el espacio
 
     db = Database()
     
@@ -129,7 +127,7 @@ def main(page: ft.Page):
         container_alerta_cierres = ft.Container(
             content=ft.Row([
                 ft.Icon(ft.icons.WARNING_AMBER_ROUNDED, color=ft.colors.WHITE, size=18),
-                ft.Text("⚠️ Días pasados sin CERRAR CAJA.", color=ft.colors.WHITE, weight=ft.FontWeight.BOLD, size=12)
+                ft.Text("⚠️ Hay días recientes sin CERRAR CAJA.", color=ft.colors.WHITE, weight=ft.FontWeight.BOLD, size=12)
             ], alignment=ft.MainAxisAlignment.CENTER),
             bgcolor=ft.colors.RED_800,
             padding=6,
@@ -993,12 +991,15 @@ def main(page: ft.Page):
                 print(f"Error deudas: {ex}")
 
         def verificar_cierres_olvidados():
-            hoy_str = datetime.date.today().strftime("%Y-%m-%d")
+            hoy = datetime.date.today()
+            limite_antiguedad = hoy - datetime.timedelta(days=5) # Solo revisa los últimos 5 días
+            hoy_str = hoy.strftime("%Y-%m-%d")
+            limite_str = limite_antiguedad.strftime("%Y-%m-%d")
             try:
                 db.cursor.execute("""
-                    SELECT DISTINCT fecha_corta FROM ventas WHERE fecha_corta < %s AND fecha_corta NOT IN (SELECT fecha_corta FROM cierres)
-                    UNION SELECT DISTINCT fecha_corta FROM gastos WHERE fecha_corta < %s AND fecha_corta NOT IN (SELECT fecha_corta FROM cierres)
-                """, (hoy_str, hoy_str))
+                    SELECT DISTINCT fecha_corta FROM ventas WHERE fecha_corta >= %s AND fecha_corta < %s AND fecha_corta NOT IN (SELECT fecha_corta FROM cierres)
+                    UNION SELECT DISTINCT fecha_corta FROM gastos WHERE fecha_corta >= %s AND fecha_corta < %s AND fecha_corta NOT IN (SELECT fecha_corta FROM cierres)
+                """, (limite_str, hoy_str, limite_str, hoy_str))
                 olvidados = db.cursor.fetchall()
                 container_alerta_cierres.visible = len(olvidados) > 0
             except Exception as ex:
@@ -1110,27 +1111,33 @@ def main(page: ft.Page):
         tab_views = [tab_inicio, tab_caja, tab_clientes, tab_gastos, tab_deudas, tab_historial]
         content_area = ft.Container(content=tab_views[0], expand=True)
 
-        def cambiar_pestana(idx):
+        def cambiar_pestana(e):
+            idx = int(e.control.data)
             content_area.content = tab_views[idx]
             if idx == 2:
                 cargar_tabla_clientes()
             for i, btn in enumerate(nav_buttons.controls):
-                btn.style = ft.ButtonStyle(
-                    bgcolor=C_CELESTE_PRINCIPAL if i == idx else C_GRIS_FONDO,
-                    color=C_BLANCO if i == idx else C_TEXTO_NEGRO
-                )
+                btn.bgcolor = C_CELESTE_PRINCIPAL if i == idx else C_GRIS_FONDO
+                btn.color = C_BLANCO if i == idx else C_TEXTO_NEGRO
             page.update()
 
         nav_buttons = ft.Row([
-            ft.ElevatedButton("📊 Hoy", on_click=lambda e: cambiar_pestana(0), bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO),
-            ft.ElevatedButton("💵 Caja", on_click=lambda e: cambiar_pestana(1), bgcolor=C_GRIS_FONDO, color=C_TEXTO_NEGRO),
-            ft.ElevatedButton("👤 Clientes", on_click=lambda e: cambiar_pestana(2), bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO),
-            ft.ElevatedButton("💸 Gastos", on_click=lambda e: cambiar_pestana(3), bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO),
-            ft.ElevatedButton("🔴 Deudas", on_click=lambda e: cambiar_pestana(4), bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO),
-            ft.ElevatedButton("📋 Reportes", on_click=lambda e: cambiar_pestana(5), bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO),
+            ft.ElevatedButton("📊 Hoy", on_click=cambiar_pestana, data=0, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO),
+            ft.ElevatedButton("💵 Caja", on_click=cambiar_pestana, data=1, bgcolor=C_GRIS_FONDO, color=C_TEXTO_NEGRO),
+            ft.ElevatedButton("👤 Clientes", on_click=cambiar_pestana, data=2, bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO),
+            ft.ElevatedButton("💸 Gastos", on_click=cambiar_pestana, data=3, bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO),
+            ft.ElevatedButton("🔴 Deudas", on_click=cambiar_pestana, data=4, bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO),
+            ft.ElevatedButton("📋 Reportes", on_click=cambiar_pestana, data=5, bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO),
         ], spacing=6, scroll=ft.ScrollMode.AUTO)
 
-        page.add(header_bar, container_alerta_cierres, action_bar, nav_buttons, content_area)
+        page.clean()
+        page.add(
+            header_bar, 
+            container_alerta_cierres, 
+            action_bar, 
+            nav_buttons, 
+            ft.Container(content=content_area, expand=True)
+        )
         refrescar_pantallas()
 
     tf_user = ft.TextField(label="Usuario", width=260, border_radius=8)
