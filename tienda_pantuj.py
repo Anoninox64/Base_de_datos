@@ -328,12 +328,18 @@ def main(page: ft.Page):
                     mostrar_snack("Cliente guardado.")
                 db.conn.commit()
                 
-                cerrar_dialogo_seguro(dialog_cliente)
+                # Cierre totalmente seguro y limpieza de overlay para evitar pantalla blanca en móviles
+                dialog_cliente.open = False
+                if dialog_cliente in page.overlay:
+                    page.overlay.remove(dialog_cliente)
+                
                 tf_cli_nombre.value = ""
                 tf_cli_servicio.value = ""
                 tf_cli_precio.value = ""
                 tf_cli_notas.value = ""
+                
                 cargar_tabla_clientes()
+                page.update()
             except Exception as ex:
                 db.conn.rollback()
                 mostrar_snack(f"Error al guardar: {ex}", es_error=True)
