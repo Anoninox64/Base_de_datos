@@ -163,7 +163,7 @@ def main(page: ft.Page):
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.ListView([dt_activos], expand=True),
                     ], expand=True),
-                    height=220, padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    expand=3, padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 ),
                 ft.Container(
                     content=ft.Column([
@@ -171,10 +171,10 @@ def main(page: ft.Page):
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.ListView([dt_inactivos], expand=True),
                     ], expand=True),
-                    height=180, padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    expand=2, padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 )
-            ], spacing=6),
-            padding=2
+            ], expand=True, spacing=6),
+            padding=2, expand=True
         )
 
         tf_fondo_base = ft.TextField(label="Fondo Inicial (Q)", width=150, keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
@@ -199,13 +199,15 @@ def main(page: ft.Page):
                 return
             try:
                 monto = float(tf_fondo_base.value) if tf_fondo_base.value else 0.0
+                if monto < 0:
+                    raise ValueError()
                 fecha_str = estado["fecha"].strftime("%Y-%m-%d")
                 db.cursor.execute("INSERT INTO fondo_caja (fecha_corta, monto) VALUES (%s, %s) ON CONFLICT (fecha_corta) DO UPDATE SET monto = EXCLUDED.monto", (fecha_str, monto))
                 db.conn.commit()
                 mostrar_snack("Fondo inicial asignado.")
                 refrescar_pantallas()
             except ValueError:
-                mostrar_snack("Ingresa un monto numérico válido.", es_error=True)
+                mostrar_snack("Ingresa un monto válido y positivo.", es_error=True)
 
         tab_caja = ft.Container(
             content=ft.Column([
@@ -226,10 +228,10 @@ def main(page: ft.Page):
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.ListView([dt_abonos_hoy], expand=True)
                     ], expand=True),
-                    height=200, padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    expand=True, padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 )
-            ], spacing=6),
-            padding=2
+            ], expand=True, spacing=6),
+            padding=2, expand=True
         )
 
         tf_cli_nombre = ft.TextField(label="Nombre Completo", border_radius=8)
@@ -238,7 +240,6 @@ def main(page: ft.Page):
         tf_cli_notas = ft.TextField(label="Notas / Contacto", multiline=True, min_lines=2, max_lines=3, border_radius=8)
         tf_cli_buscar = ft.TextField(label="🔍 Buscar Cliente", border_radius=8, expand=True, on_change=lambda e: cargar_tabla_clientes())
 
-        # Contenedor flexible para mostrar los clientes como lista limpia en celulares y tabla en PC
         lista_clientes_movil = ft.ListView([], expand=True, spacing=6)
 
         dt_clientes = ft.DataTable(
@@ -305,8 +306,10 @@ def main(page: ft.Page):
             servicio = tf_cli_servicio.value.strip() if tf_cli_servicio.value else ""
             try:
                 precio = float(tf_cli_precio.value) if tf_cli_precio.value else 0.0
+                if precio < 0:
+                    raise ValueError()
             except ValueError:
-                mostrar_snack("La tarifa debe ser numérica.", es_error=True)
+                mostrar_snack("La tarifa debe ser un número válido.", es_error=True)
                 return
 
             if not nombre or not servicio:
@@ -371,7 +374,7 @@ def main(page: ft.Page):
                 ft.Divider(color=C_GRIS_BORDE),
                 lista_clientes_movil if page.width <= 700 else ft.ListView([dt_clientes], expand=True)
             ], expand=True),
-            padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+            padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO, expand=True
         )
 
         tf_gas_desc = ft.TextField(label="Descripción del Gasto", border_radius=8)
@@ -394,12 +397,10 @@ def main(page: ft.Page):
             desc = tf_gas_desc.value.strip() if tf_gas_desc.value else ""
             try:
                 monto = float(tf_gas_monto.value) if tf_gas_monto.value else 0.0
+                if monto <= 0:
+                    raise ValueError()
             except ValueError:
-                mostrar_snack("Monto inválido.", es_error=True)
-                return
-
-            if not desc or monto <= 0:
-                mostrar_snack("Datos de gasto incompletos.", es_error=True)
+                mostrar_snack("Monto de gasto inválido.", es_error=True)
                 return
 
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
@@ -431,10 +432,10 @@ def main(page: ft.Page):
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.ListView([dt_gastos], expand=True)
                     ], expand=True),
-                    height=200, padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    expand=True, padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 )
-            ], spacing=6),
-            padding=2
+            ], expand=True, spacing=6),
+            padding=2, expand=True
         )
 
         lbl_total_deudas_global = ft.Text("Pendiente Global: Q 0.00", size=13, weight=ft.FontWeight.BOLD, color=ft.colors.RED_700)
@@ -462,7 +463,7 @@ def main(page: ft.Page):
                 ft.Divider(color=C_GRIS_BORDE),
                 ft.ListView([dt_deudas], expand=True)
             ], expand=True),
-            padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+            padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO, expand=True
         )
 
         tf_hist_inicio = ft.TextField(label="Desde (YYYY-MM-DD)", value=datetime.date.today().strftime("%Y-%m-01"), expand=True, border_radius=8)
@@ -545,10 +546,10 @@ def main(page: ft.Page):
                 ),
                 ft.Container(
                     content=ft.Column([ft.Text("📅 Días", size=12, weight=ft.FontWeight.BOLD), ft.ListView([dt_cronologico], expand=True)], expand=True),
-                    height=180, padding=4, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8
+                    expand=True, padding=4, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8
                 )
-            ], spacing=4),
-            padding=2
+            ], expand=True, spacing=4),
+            padding=2, expand=True
         )
 
         tf_abono_monto = ft.TextField(label="Monto de Abono (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
@@ -910,7 +911,6 @@ def main(page: ft.Page):
                     def ver_hist_fn(e, cid=c_id, n=nombre, nt=notas):
                         ver_historial_cliente(cid, n, nt)
 
-                    # Si es móvil, generamos una tarjeta en la lista vertical con botones claros
                     if page.width <= 700:
                         card_item = ft.Container(
                             content=ft.Column([
@@ -1030,7 +1030,13 @@ def main(page: ft.Page):
             except Exception as ex:
                 print(f"Error cierres: {ex}")
 
-        def refrescar_pantallas():
+        def refrescar_pantallas(e=None):
+            # Reconecta o reejecuta consultas por si hubo cambios en otro dispositivo (Sincronización en vivo)
+            try:
+                db.conn.rollback() # Limpia transacciones pendientes y actualiza vista con datos remotos
+            except:
+                pass
+
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
             lbl_fecha.value = fecha_str
 
@@ -1056,6 +1062,7 @@ def main(page: ft.Page):
             cargar_datos_caja()
             cargar_tabla_gastos()
             cargar_tabla_deudas()
+            mostrar_snack("🔄 Datos sincronizados", es_error=False)
             page.update()
 
         def cambiar_dia(delta):
@@ -1103,6 +1110,7 @@ def main(page: ft.Page):
         btn_carrusel = ft.ElevatedButton("⚡ Carrusel", icon=ft.icons.FLASHLIGHT_ON, on_click=abrir_carrusel_click, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
         btn_cerrar_caja = ft.ElevatedButton("🔒 Cerrar", icon=ft.icons.LOCK, on_click=ejecutar_cierre_dia, bgcolor=ft.colors.GREY_800, color=C_BLANCO)
         btn_abrir_caja = ft.ElevatedButton("🔓 Reabrir", icon=ft.icons.LOCK_OPEN, on_click=ejecutar_apertura_dia, bgcolor=ft.colors.ORANGE_800, color=C_BLANCO, visible=False)
+        btn_sync = ft.IconButton(icon=ft.icons.SYNC, icon_color=C_CELESTE_PRINCIPAL, on_click=refrescar_pantallas, tooltip="Sincronizar Datos")
 
         header_bar = ft.Container(
             content=ft.Row([
@@ -1113,7 +1121,7 @@ def main(page: ft.Page):
                     ft.IconButton(icon=ft.icons.ARROW_FORWARD_IOS, icon_size=12, on_click=lambda e: cambiar_dia(1)),
                     badge_estado,
                 ], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
-                lbl_caja_total
+                ft.Row([lbl_caja_total, btn_sync], spacing=2)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             padding=6, bgcolor=C_GRIS_FONDO, border_radius=8, border=ft.border.all(1, C_GRIS_BORDE)
         )
@@ -1149,7 +1157,7 @@ def main(page: ft.Page):
 
         nav_row_1 = ft.Row([
             ft.ElevatedButton("📊 Hoy", on_click=cambiar_pestana, data=0, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO, expand=True),
-            ft.ElevatedButton("💵 Caja", on_click=cambiar_pestana, data=1, bgcolor=C_GRIS_FONDO, color=C_TEXTO_NEGRO, expand=True),
+            ft.ElevatedButton("💵 Caja", on_click=cambiar_pestana, data=1, bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO, expand=True),
             ft.ElevatedButton("👤 Clientes", on_click=cambiar_pestana, data=2, bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO, expand=True),
         ], spacing=4)
 
@@ -1162,16 +1170,17 @@ def main(page: ft.Page):
         nav_container_mobile = ft.Column([nav_row_1, nav_row_2], spacing=4)
         menu_activo = nav_buttons_pc if page.width > 700 else nav_container_mobile
 
-        main_scroll_container = ft.ListView([
+        # Contenedor optimizado adaptativo que evita espacios en blanco muertos en PC
+        main_layout = ft.Column([
             header_bar,
             container_alerta_cierres,
             action_bar,
             menu_activo,
-            ft.Container(content=content_area, expand=True, height=480)
+            ft.Container(content=content_area, expand=True)
         ], expand=True, spacing=6)
 
         page.clean()
-        page.add(main_scroll_container)
+        page.add(main_layout)
         refrescar_pantallas()
 
     tf_user = ft.TextField(label="Usuario", width=260, border_radius=8)
