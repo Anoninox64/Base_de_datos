@@ -64,13 +64,13 @@ class Database:
             print(f"Error al crear tablas en Neon: {e}")
 
 # ==========================================================================
-# 2. APLICACIÓN PRINCIPAL FLET CON LOGIN Y ADAPTACIÓN MÓVIL
+# 2. APLICACIÓN PRINCIPAL FLET ADAPTATIVA (PC Y MÓVIL)
 # ==========================================================================
 def main(page: ft.Page):
     page.title = "Tienda Pantuj - Control Cloud"
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 6
-    page.spacing = 6
+    page.padding = 8
+    page.spacing = 8
     page.adaptive = True
 
     db = Database()
@@ -162,19 +162,19 @@ def main(page: ft.Page):
                         ft.Text("🟢 Cobros del Día", size=14, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.ListView([dt_activos], expand=True),
-                    ]),
-                    expand=3, padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    ], expand=True),
+                    height=240, padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 ),
                 ft.Container(
                     content=ft.Column([
                         ft.Text("⚫ Lista Negra / Ausentes", size=13, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.ListView([dt_inactivos], expand=True),
-                    ]),
-                    expand=2, padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    ], expand=True),
+                    height=200, padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 )
-            ], expand=True, spacing=6),
-            padding=2, expand=True
+            ], spacing=8),
+            padding=2
         )
 
         tf_fondo_base = ft.TextField(label="Fondo Inicial (Q)", width=160, keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
@@ -225,11 +225,11 @@ def main(page: ft.Page):
                         ft.Text("💰 Abonos de Hoy", size=14, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.ListView([dt_abonos_hoy], expand=True)
-                    ]),
-                    expand=True, padding=10, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    ], expand=True),
+                    height=250, padding=10, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 )
-            ], expand=True, spacing=8),
-            padding=2, expand=True
+            ], spacing=8),
+            padding=2
         )
 
         tf_cli_nombre = ft.TextField(label="Nombre Completo", border_radius=8)
@@ -363,7 +363,7 @@ def main(page: ft.Page):
                 ft.Divider(color=C_GRIS_BORDE),
                 ft.ListView([dt_clientes], expand=True)
             ], expand=True),
-            padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO, expand=True
+            padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
         )
 
         tf_gas_desc = ft.TextField(label="Descripción del Gasto", border_radius=8)
@@ -422,11 +422,11 @@ def main(page: ft.Page):
                         ft.Text("📋 Egresos de Hoy", size=14, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO),
                         ft.Divider(color=C_GRIS_BORDE),
                         ft.ListView([dt_gastos], expand=True)
-                    ]),
-                    expand=True, padding=10, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    ], expand=True),
+                    height=240, padding=10, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 )
-            ], expand=True, spacing=8),
-            padding=2, expand=True
+            ], spacing=8),
+            padding=2
         )
 
         lbl_total_deudas_global = ft.Text("Pendiente Global: Q 0.00", size=14, weight=ft.FontWeight.BOLD, color=ft.colors.RED_700)
@@ -454,7 +454,7 @@ def main(page: ft.Page):
                 ft.Divider(color=C_GRIS_BORDE),
                 ft.ListView([dt_deudas], expand=True)
             ], expand=True),
-            padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO, expand=True
+            padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
         )
 
         tf_hist_inicio = ft.TextField(label="Desde (YYYY-MM-DD)", value=datetime.date.today().strftime("%Y-%m-01"), expand=True, border_radius=8)
@@ -536,11 +536,11 @@ def main(page: ft.Page):
                     padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8
                 ),
                 ft.Container(
-                    content=ft.Column([ft.Text("📅 Días en el Rango", size=13, weight=ft.FontWeight.BOLD), ft.ListView([dt_cronologico], expand=True)]),
-                    expand=True, padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8
+                    content=ft.Column([ft.Text("📅 Días en el Rango", size=13, weight=ft.FontWeight.BOLD), ft.ListView([dt_cronologico], expand=True)], expand=True),
+                    height=220, padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8
                 )
-            ], expand=True, spacing=6),
-            padding=8, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO, expand=True
+            ], spacing=6),
+            padding=2
         )
 
         tf_abono_monto = ft.TextField(label="Monto de Abono (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
@@ -1100,14 +1100,24 @@ def main(page: ft.Page):
             if idx == 2:
                 cargar_tabla_clientes()
             
-            # Actualizamos colores de todos los botones en las dos filas
-            all_btn_rows = nav_row_1.controls + nav_row_2.controls
-            for i, btn in enumerate(all_btn_rows):
+            # Actualizamos colores según el tipo de menú activo
+            all_btns = nav_buttons_pc.controls if page.width > 700 else (nav_row_1.controls + nav_row_2.controls)
+            for i, btn in enumerate(all_btns):
                 btn.bgcolor = C_CELESTE_PRINCIPAL if i == idx else C_GRIS_FONDO
                 btn.color = C_BLANCO if i == idx else C_TEXTO_NEGRO
             page.update()
 
-        # Botones distribuidos en 2 filas fijas para garantizar visibilidad total en móviles
+        # Menú para Computadora (En una sola línea horizontal elegante)
+        nav_buttons_pc = ft.Row([
+            ft.ElevatedButton("📊 Hoy", on_click=cambiar_pestana, data=0, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO),
+            ft.ElevatedButton("💵 Caja", on_click=cambiar_pestana, data=1, bgcolor=C_GRIS_FONDO, color=C_TEXTO_NEGRO),
+            ft.ElevatedButton("👤 Clientes", on_click=cambiar_pestana, data=2, bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO),
+            ft.ElevatedButton("💸 Gastos", on_click=cambiar_pestana, data=3, bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO),
+            ft.ElevatedButton("🔴 Deudas", on_click=cambiar_pestana, data=4, bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO),
+            ft.ElevatedButton("📋 Reportes", on_click=cambiar_pestana, data=5, bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO),
+        ], spacing=6)
+
+        # Menú para Celular (En 2 filas fijas para evitar cortes)
         nav_row_1 = ft.Row([
             ft.ElevatedButton("📊 Hoy", on_click=cambiar_pestana, data=0, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO, expand=True),
             ft.ElevatedButton("💵 Caja", on_click=cambiar_pestana, data=1, bgcolor=C_GRIS_FONDO, color=C_TEXTO_NEGRO, expand=True),
@@ -1120,16 +1130,22 @@ def main(page: ft.Page):
             ft.ElevatedButton("📋 Reportes", on_click=cambiar_pestana, data=5, bgcolor=C_GRIS_BORDE, color=C_TEXTO_NEGRO, expand=True),
         ], spacing=4)
 
-        nav_container = ft.Column([nav_row_1, nav_row_2], spacing=4)
+        nav_container_mobile = ft.Column([nav_row_1, nav_row_2], spacing=4)
+
+        # Selector inteligente según el ancho de pantalla (PC vs Celular)
+        menu_activo = nav_buttons_pc if page.width > 700 else nav_container_mobile
+
+        # Contenedor principal con Scroll vertical estilo PDF para el celular
+        main_scroll_container = ft.ListView([
+            header_bar,
+            container_alerta_cierres,
+            action_bar,
+            menu_activo,
+            ft.Container(content=content_area, expand=True, height=500)
+        ], expand=True, spacing=8)
 
         page.clean()
-        page.add(
-            header_bar, 
-            container_alerta_cierres, 
-            action_bar, 
-            nav_container, 
-            ft.Container(content=content_area, expand=True)
-        )
+        page.add(main_scroll_container)
         refrescar_pantallas()
 
     tf_user = ft.TextField(label="Usuario", width=260, border_radius=8)
