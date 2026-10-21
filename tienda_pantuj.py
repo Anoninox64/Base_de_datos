@@ -69,8 +69,11 @@ class Database:
 def main(page: ft.Page):
     page.title = "Tienda Pantuj - Control Cloud"
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 10
-    page.spacing = 8
+    page.padding = 6
+    page.spacing = 6
+    page.adaptive = True  # Habilita el comportamiento adaptativo para móviles
+    
+    # Eliminamos window.width y window.height fijos para que el navegador móvil controle el espacio
 
     db = Database()
     
