@@ -1310,7 +1310,7 @@ def main(page: ft.Page):
             action_bar,
             menu_activo,
             ft.Container(content=content_area, expand=True)
-        ], expand=ThreadSpacer := True if False else True, spacing=6) # type: ignore
+        ], expand=True, spacing=6)
 
         page.clean()
         page.add(main_layout)
