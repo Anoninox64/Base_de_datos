@@ -146,7 +146,8 @@ def main(page: ft.Page):
             columns=[
                 ft.DataColumn(ft.Text("Cliente", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Detalle", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Real", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Total", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Efectivo", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Debe", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Acción", weight=ft.FontWeight.BOLD)),
             ],
@@ -185,21 +186,23 @@ def main(page: ft.Page):
             padding=2, expand=True
         )
 
+        # Campos de edición de cobros del día
         tf_edit_v_prod = ft.TextField(label="Detalle / Producto", border_radius=8)
-        tf_edit_v_pagado = ft.TextField(label="Pagado / Real (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
-        tf_edit_v_pendiente = ft.TextField(label="Pendiente / Debe (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
+        tf_edit_v_total = ft.TextField(label="Total (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
+        tf_edit_v_efectivo = ft.TextField(label="Efectivo Recibido (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
         lbl_edit_v_info = ft.Text("", size=12, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
 
         dialog_editar_venta = ft.AlertDialog(
             title=ft.Text("✏️ Modificar Cobro del Día", weight=ft.FontWeight.BOLD),
             content=ft.Container(
-                content=ft.Column([lbl_edit_v_info, tf_edit_v_prod, tf_edit_v_pagado, tf_edit_v_pendiente], width=300, height=220, spacing=6),
-                padding=2
+                content=ft.Column([lbl_edit_v_info, tf_edit_v_prod, tf_edit_v_total, tf_edit_v_efectivo], spacing=8, scroll=ft.ScrollMode.AUTO),
+                padding=4,
+                width=320
             ),
             actions=[]
         )
 
-        def abrir_modal_editar_venta(v_id, cliente_nombre, prod, pagado, pendiente):
+        def abrir_modal_editar_venta(v_id, cliente_nombre, prod, total, pagado):
             if es_dia_congelado():
                 mostrar_snack("Caja congelada hoy. No se puede modificar.", es_error=True)
                 return
@@ -207,26 +210,26 @@ def main(page: ft.Page):
             estado["edit_venta_id"] = v_id
             lbl_edit_v_info.value = f"Cliente: {cliente_nombre}"
             tf_edit_v_prod.value = prod
-            tf_edit_v_pagado.value = str(pagado)
-            tf_edit_v_pendiente.value = str(pendiente)
+            tf_edit_v_total.value = str(total)
+            tf_edit_v_efectivo.value = str(pagado)
 
             def guardar_edicion_venta(e):
                 try:
-                    p_nuevo = float(tf_edit_v_pagado.value)
-                    pend_nuevo = float(tf_edit_v_pendiente.value)
-                    if p_nuevo < 0 or pend_nuevo < 0:
+                    tot_nuevo = float(tf_edit_v_total.value)
+                    p_nuevo = float(tf_edit_v_efectivo.value)
+                    if tot_nuevo < 0 or p_nuevo < 0:
                         raise ValueError()
                 except ValueError:
                     mostrar_snack("Los montos deben ser numéricos válidos.", es_error=True)
                     return
 
                 prod_nuevo = tf_edit_v_prod.value.strip()
-                total_nuevo = p_nuevo + pend_nuevo
+                pend_nuevo = max(0.0, tot_nuevo - p_nuevo)
 
                 try:
                     db.cursor.execute("""
                         UPDATE ventas SET producto=%s, total=%s, pagado=%s, pendiente=%s WHERE id=%s
-                    """, (prod_nuevo, total_nuevo, p_nuevo, pend_nuevo, estado["edit_venta_id"]))
+                    """, (prod_nuevo, tot_nuevo, p_nuevo, pend_nuevo, estado["edit_venta_id"]))
                     db.conn.commit()
                     cerrar_dialogo_seguro(dialog_editar_venta)
                     mostrar_snack("Cobro actualizado correctamente.")
@@ -323,8 +326,9 @@ def main(page: ft.Page):
         dialog_cliente = ft.AlertDialog(
             title=ft.Text("👤 Formulario de Cliente", weight=ft.FontWeight.BOLD),
             content=ft.Container(
-                content=ft.Column([tf_cli_nombre, tf_cli_servicio, tf_cli_precio, tf_cli_notas], width=300, height=240, spacing=6),
-                padding=2
+                content=ft.Column([tf_cli_nombre, tf_cli_servicio, tf_cli_precio, tf_cli_notas], spacing=8, scroll=ft.ScrollMode.AUTO),
+                padding=4,
+                width=320
             ),
             actions=[]
         )
@@ -343,8 +347,9 @@ def main(page: ft.Page):
         dialog_historial = ft.AlertDialog(
             title=ft.Text("📜 Historial", weight=ft.FontWeight.BOLD),
             content=ft.Container(
-                content=ft.Column([lbl_hist_cli_info, ft.Divider(color=C_GRIS_BORDE), ft.ListView([dt_historial_cli], expand=True)], width=320, height=280, spacing=4),
-                padding=2
+                content=ft.Column([lbl_hist_cli_info, ft.Divider(color=C_GRIS_BORDE), ft.ListView([dt_historial_cli], expand=True)], spacing=4, scroll=ft.ScrollMode.AUTO),
+                padding=4,
+                width=320
             ),
             actions=[ft.TextButton("Cerrar", on_click=lambda e: cerrar_dialogo_seguro(dialog_historial))]
         )
@@ -632,7 +637,11 @@ def main(page: ft.Page):
 
         dialog_abono = ft.AlertDialog(
             title=ft.Text("💰 Registrar Abono", weight=ft.FontWeight.BOLD),
-            content=ft.Column([lbl_abono_info, tf_abono_monto], height=100, spacing=6),
+            content=ft.Container(
+                content=ft.Column([lbl_abono_info, tf_abono_monto], spacing=8, scroll=ft.ScrollMode.AUTO),
+                padding=4,
+                width=320
+            ),
             actions=[]
         )
 
@@ -689,18 +698,19 @@ def main(page: ft.Page):
         lbl_car_alerta = ft.Text("", size=10, color=ft.colors.RED_700, weight=ft.FontWeight.BOLD)
 
         tf_car_desc = ft.TextField(label="Detalle del Trabajo", border_radius=8)
-        tf_car_total = ft.TextField(label="Total (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
-        tf_car_pago = ft.TextField(label="Efectivo en Caja (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
+        tf_car_total = ft.TextField(label="Total Trabajo Hoy (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
+        tf_car_pago = ft.TextField(label="Efectivo Recibido Hoy (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
         tf_car_abono_v = ft.TextField(label="Abono a Deuda Anterior (Q)", value="0.00", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
 
-        col_form_carrusel = ft.Column([tf_car_desc, tf_car_total, tf_car_pago, lbl_car_alerta, tf_car_abono_v], visible=False, spacing=4)
-        col_preg_carrusel = ft.Column([], visible=True, spacing=4)
+        col_form_carrusel = ft.Column([tf_car_desc, tf_car_total, tf_car_pago, lbl_car_alerta, tf_car_abono_v], visible=False, spacing=6)
+        col_preg_carrusel = ft.Column([], visible=True, spacing=6)
 
         dialog_carrusel = ft.AlertDialog(
             title=ft.Row([ft.Text("⚡ Carrusel", weight=ft.FontWeight.BOLD), lbl_car_idx], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             content=ft.Container(
-                content=ft.Column([lbl_car_name, lbl_car_info, ft.Divider(color=C_GRIS_BORDE), col_preg_carrusel, col_form_carrusel], width=280, height=300, spacing=4),
-                padding=2
+                content=ft.Column([lbl_car_name, lbl_car_info, ft.Divider(color=C_GRIS_BORDE), col_preg_carrusel, col_form_carrusel], spacing=6, scroll=ft.ScrollMode.AUTO),
+                padding=4,
+                width=320
             ),
             actions=[]
         )
@@ -715,24 +725,25 @@ def main(page: ft.Page):
             cli = estado["carrusel_list"][estado["carrusel_idx"]]
             c_id, c_name, c_serv, c_price, c_notes = cli
 
-            lbl_car_idx.value = f"Cliente {estado['carrusel_idx'] + 1} de {len(estado['carrusel_list'])}"
+            lbl_car_idx.value = f"{estado['carrusel_idx'] + 1} / {len(estado['carrusel_list'])}"
             lbl_car_name.value = c_name
             lbl_car_info.value = f"Servicio: {c_serv}\nTarifa: Q {c_price:.2f}\nNotas: {c_notes if c_notes else 'Ninguna'}"
 
-            tf_car_desc.value = c_serv
+            tf_car_desc.value = str(c_serv)
             tf_car_total.value = str(c_price)
             tf_car_pago.value = str(c_price)
             tf_car_abono_v.value = "0.00"
 
             db.cursor.execute("SELECT SUM(pendiente) FROM ventas WHERE cliente_id=%s", (c_id,))
             res_deuda = db.cursor.fetchone()
-            deuda_total = res_deuda[0] if res_deuda and res_deuda[0] else 0.0
+            deuda_total = float(res_deuda[0]) if res_deuda and res_deuda[0] else 0.0
 
             if deuda_total > 0:
                 estado["tiene_deuda_previa"] = True
-                lbl_car_alerta.value = f"⚠️ Deuda anterior: Q {deuda_total:.2f}"
+                lbl_car_alerta.value = f"⚠️ Deuda anterior pendiente: Q {deuda_total:.2f}"
                 lbl_car_alerta.visible = True
                 tf_car_abono_v.visible = True
+                tf_car_abono_v.disabled = False
             else:
                 estado["tiene_deuda_previa"] = False
                 lbl_car_alerta.visible = False
@@ -771,11 +782,11 @@ def main(page: ft.Page):
 
             try:
                 desc = tf_car_desc.value.strip() if tf_car_desc.value else ""
-                tot = float(tf_car_total.value)
-                pag = float(tf_car_pago.value)
+                tot = float(tf_car_total.value) if tf_car_total.value else 0.0
+                pag = float(tf_car_pago.value) if tf_car_pago.value else 0.0
                 abono_v = float(tf_car_abono_v.value) if (estado["tiene_deuda_previa"] and tf_car_abono_v.value) else 0.0
 
-                if tot < 0 or pag < 0 or pag > tot or abono_v < 0:
+                if tot < 0 or pag < 0 or abono_v < 0:
                     raise ValueError()
             except ValueError:
                 mostrar_snack("Valores numéricos inválidos.", es_error=True)
@@ -795,6 +806,7 @@ def main(page: ft.Page):
                     por_abonar = abono_v
                     for v_id, v_pend in deudas_viejas:
                         if por_abonar <= 0: break
+                        v_pend = float(v_pend)
                         if por_abonar >= v_pend:
                             db.cursor.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = 0 WHERE id = %s", (v_pend, v_id))
                             por_abonar -= v_pend
@@ -876,14 +888,14 @@ def main(page: ft.Page):
 
             try:
                 db.cursor.execute("""
-                    SELECT v.id, c.nombre, v.producto, v.pagado, v.pendiente 
+                    SELECT v.id, c.nombre, v.producto, v.total, v.pagado, v.pendiente 
                     FROM ventas v JOIN clientes c ON v.cliente_id = c.id WHERE v.fecha_corta=%s
                 """, (fecha_str,))
                 for r in db.cursor.fetchall():
-                    v_id, c_nombre, prod, pag, pend = r
+                    v_id, c_nombre, prod, total, pag, pend = r
 
-                    def editar_venta_fn(e, vid=v_id, name=c_nombre, p=prod, pg=pag, pn=pend):
-                        abrir_modal_editar_venta(vid, name, p, pg, pn)
+                    def editar_venta_fn(e, vid=v_id, name=c_nombre, p=prod, tot=total, pg=pag):
+                        abrir_modal_editar_venta(vid, name, p, tot, pg)
 
                     def borrar_venta_fn(e, vid=v_id, name=c_nombre):
                         if es_dia_congelado():
@@ -899,13 +911,20 @@ def main(page: ft.Page):
                             mostrar_snack(f"Error: {ex}", es_error=True)
 
                     if page.width <= 700:
+                        texto_pago_deuda = f"Efectivo: Q {pag:.2f}"
+                        if pend > 0:
+                            texto_pago_deuda += f" (Debe: Q {pend:.2f})"
+
                         card_item = ft.Container(
                             content=ft.Column([
                                 ft.Row([
                                     ft.Text(f"{c_nombre}", weight=ft.FontWeight.BOLD, size=13, color=C_TEXTO_NEGRO),
-                                    ft.Text(f"Q {pag:.1f} (Debe: Q {pend:.1f})", weight=ft.FontWeight.BOLD, size=12, color=ft.colors.RED_700 if pend > 0 else C_CELESTE_PRINCIPAL)
+                                    ft.Text(f"Total: Q {total:.2f}", weight=ft.FontWeight.BOLD, size=12, color=C_CELESTE_PRINCIPAL)
                                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                ft.Text(f"Detalle: {prod}", size=11, color=ft.colors.GREY_700),
+                                ft.Row([
+                                    ft.Text(f"Detalle: {prod}", size=11, color=ft.colors.GREY_700),
+                                    ft.Text(texto_pago_deuda, size=11, color=ft.colors.RED_700 if pend > 0 else ft.colors.GREEN_800, weight=ft.FontWeight.BOLD)
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                                 ft.Row([
                                     ft.IconButton(icon=ft.icons.EDIT, icon_size=16, icon_color=C_CELESTE_PRINCIPAL, on_click=editar_venta_fn, tooltip="Editar"),
                                     ft.IconButton(icon=ft.icons.DELETE, icon_size=16, icon_color=ft.colors.RED_600, on_click=borrar_venta_fn, tooltip="Eliminar"),
@@ -923,8 +942,9 @@ def main(page: ft.Page):
                             ft.DataRow(cells=[
                                 ft.DataCell(ft.Text(c_nombre, color=C_TEXTO_NEGRO)),
                                 ft.DataCell(ft.Text(prod, color=C_TEXTO_NEGRO)),
-                                ft.DataCell(ft.Text(f"Q {pag:.1f}", color=C_TEXTO_NEGRO)),
-                                ft.DataCell(ft.Text(f"Q {pend:.1f}", color=ft.colors.RED_700 if pend > 0 else C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {total:.2f}", color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {pag:.2f}", color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {pend:.2f}", color=ft.colors.RED_700 if pend > 0 else C_TEXTO_NEGRO)),
                                 ft.DataCell(ft.Row([
                                     ft.IconButton(icon=ft.icons.EDIT, icon_size=16, icon_color=C_CELESTE_PRINCIPAL, on_click=editar_venta_fn, tooltip="Editar"),
                                     ft.IconButton(icon=ft.icons.DELETE, icon_size=16, icon_color=ft.colors.RED_600, on_click=borrar_venta_fn, tooltip="Eliminar"),
