@@ -513,9 +513,7 @@ def main(page: ft.Page):
 
         lbl_total_deudas_global = ft.Text("Pendiente Global: Q 0.00", size=13, weight=ft.FontWeight.BOLD, color=ft.colors.RED_700)
 
-        # Contenedor dinámico único para la pestaña de deudas
-        contenedor_cuerpo_deudas = ft.Container(expand=True)
-
+        # Componentes persistentes de la pestaña de deudas para evitar errores en el re-renderizado
         dt_deudas = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD)),
@@ -529,6 +527,8 @@ def main(page: ft.Page):
             ],
             rows=[]
         )
+        lista_deudas_movil = ft.ListView([], expand=True, spacing=6)
+        contenedor_cuerpo_deudas = ft.Container(expand=True)
 
         tab_deudas = ft.Container(
             content=ft.Column([
@@ -1110,7 +1110,7 @@ def main(page: ft.Page):
 
         def cargar_tabla_deudas():
             dt_deudas.rows.clear()
-            lista_deudas = ft.ListView([], expand=True, spacing=6)
+            lista_deudas_movil.controls.clear()
             
             try:
                 db.cursor.execute("""
@@ -1145,7 +1145,7 @@ def main(page: ft.Page):
                             border_radius=6,
                             bgcolor=C_BLANCO
                         )
-                        lista_deudas.controls.append(card_deuda)
+                        lista_deudas_movil.controls.append(card_deuda)
                     else:
                         dt_deudas.rows.append(
                             ft.DataRow(cells=[
@@ -1164,13 +1164,13 @@ def main(page: ft.Page):
 
                 if page.width <= 700:
                     if not deudas:
-                        lista_deudas.controls.append(
+                        lista_deudas_movil.controls.append(
                             ft.Container(
                                 content=ft.Text("No hay deudas pendientes.", size=14, color=C_TEXTO_NEGRO),
                                 padding=12, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                             )
                         )
-                    contenedor_cuerpo_deudas.content = lista_deudas
+                    contenedor_cuerpo_deudas.content = lista_deudas_movil
                 else:
                     contenedor_cuerpo_deudas.content = ft.ListView([dt_deudas], expand=True)
 
@@ -1178,7 +1178,7 @@ def main(page: ft.Page):
             except Exception as ex:
                 print(f"Error deudas: {ex}")
                 contenedor_cuerpo_deudas.content = ft.Container(
-                    content=ft.Text("No se pudieron cargar las deudas.", size=13, color=ft.colors.RED_700),
+                    content=ft.Text(f"Error al cargar deudas: {ex}", size=13, color=ft.colors.RED_700),
                     padding=12, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 )
                 page.update()
