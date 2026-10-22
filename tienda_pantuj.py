@@ -528,9 +528,7 @@ def main(page: ft.Page):
             rows=[]
         )
 
-        # Vistas separadas para móvil y PC. Ambas se mantienen sincronizadas;
-        # al cambiar el tamaño solo cambia cuál se muestra.
-        vista_deudas_movil = ft.Container(content=lista_deudas_movil, expand=True, visible=page.width <= 700, padding=ft.padding.only(left=2, right=2, top=4, bottom=4) )
+        vista_deudas_movil = ft.Container(content=lista_deudas_movil, expand=True, visible=page.width <= 700, padding=ft.padding.only(left=2, right=2, top=4, bottom=4))
         vista_deudas_pc = ft.Container(content=ft.ListView([dt_deudas], expand=True), expand=True, visible=page.width > 700)
 
         tab_deudas = ft.Container(
@@ -1147,7 +1145,6 @@ def main(page: ft.Page):
                         bgcolor=C_BLANCO
                     )
                     lista_deudas_movil.controls.append(card_deuda)
-                    # También rellenar la tabla de PC aunque esté oculta.
                     dt_deudas.rows.append(
                         ft.DataRow(cells=[
                             ft.DataCell(ft.Text(str(v_id), color=C_TEXTO_NEGRO)),
@@ -1349,13 +1346,15 @@ def main(page: ft.Page):
             action_bar,
             menu_activo,
             ft.Container(content=content_area, expand=True)
-        # ✅ LÍNEA CORREGIDA
-              ], expand=True, spacing=6)
+        ], expand=True, spacing=6)
 
         def ajustar_vista_por_tamano(e=None):
             es_movil = page.width <= 700
             vista_deudas_movil.visible = es_movil
             vista_deudas_pc.visible = not es_movil
+            
+            nonlocal menu_activo
+            menu_activo.controls = nav_buttons_pc.controls if not es_movil else nav_container_mobile.controls
             page.update()
 
         page.on_resize = ajustar_vista_por_tamano
