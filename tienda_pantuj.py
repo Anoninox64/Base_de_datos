@@ -513,7 +513,6 @@ def main(page: ft.Page):
 
         lbl_total_deudas_global = ft.Text("Pendiente Global: Q 0.00", size=13, weight=ft.FontWeight.BOLD, color=ft.colors.RED_700)
 
-        # Componentes persistentes de la pestaña de deudas para evitar errores en el re-renderizado
         dt_deudas = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD)),
@@ -1136,7 +1135,7 @@ def main(page: ft.Page):
                                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                                 ft.Text(f"Detalle: {producto} ({fecha})", size=11, color=ft.colors.GREY_700),
                                 ft.Row([
-                                    ft.ElevatedButton("💰 Abonar", icon=ft.icons.PAYMENTS, icon_size=14, on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
+                                    ft.ElevatedButton("💰 Abonar", icon=ft.icons.PAYMENTS, on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
                                 ], alignment=ft.MainAxisAlignment.END)
                             ], spacing=2),
                             padding=6,
