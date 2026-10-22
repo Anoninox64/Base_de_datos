@@ -1469,7 +1469,11 @@ def main(page: ft.Page):
         usuario = tf_user.value.strip() if tf_user.value else ""
         password = tf_pass.value.strip() if tf_pass.value else ""
         
-        if usuario == os.environ.get("APP_USER", "admin") and password == os.environ.get("APP_PASSWORD", "pantuj2026"):
+        # Validación flexible compatible con variables de entorno o credenciales por defecto
+        user_env = os.environ.get("APP_USER", "admin")
+        pass_env = os.environ.get("APP_PASSWORD", "pantuj2026")
+
+        if usuario == user_env and password == pass_env:
             iniciar_sistema_tienda()
         else:
             lbl_error_login.value = "❌ Credenciales incorrectas"
