@@ -76,7 +76,6 @@ def main(page: ft.Page):
     page.padding = 6
     page.spacing = 6
     page.adaptive = True
-    page.scroll = ft.ScrollMode.AUTO
 
     db = Database()
     
@@ -121,14 +120,14 @@ def main(page: ft.Page):
             except Exception as ex:
                 print(f"No se pudo cerrar el diálogo: {ex}")
 
-        txt_titulo = ft.Text("🏪 Tienda Pantuj", size=14, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
+        txt_titulo = ft.Text("🏪 Tienda Pantuj", size=15, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
         lbl_fecha = ft.Text("", size=11, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
         
         badge_estado = ft.Container(padding=ft.padding.symmetric(horizontal=4, vertical=2), border_radius=4)
         lbl_badge_texto = ft.Text("", color=C_BLANCO, weight=ft.FontWeight.BOLD, size=9)
         badge_estado.content = lbl_badge_texto
 
-        lbl_caja_total = ft.Text("Caja: Q 0.00", size=12, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
+        lbl_caja_total = ft.Text("Caja: Q 0.00", size=13, weight=ft.FontWeight.BOLD, color=C_CELESTE_PRINCIPAL)
         lbl_banner_texto = ft.Text("", size=11, weight=ft.FontWeight.W_500, color=ft.colors.GREY_800)
         
         container_alerta_cierres = ft.Container(
@@ -514,6 +513,7 @@ def main(page: ft.Page):
 
         lbl_total_deudas_global = ft.Text("Pendiente Global: Q 0.00", size=13, weight=ft.FontWeight.BOLD, color=ft.colors.RED_700)
 
+        # Contenedor dinámico único para la pestaña de deudas
         contenedor_cuerpo_deudas = ft.Container(expand=True)
 
         dt_deudas = ft.DataTable(
@@ -1109,76 +1109,79 @@ def main(page: ft.Page):
                 print(f"Error gastos: {ex}")
 
         def cargar_tabla_deudas():
+            dt_deudas.rows.clear()
+            lista_deudas = ft.ListView([], expand=True, spacing=6)
+            
             try:
-                db.conn.rollback()
                 db.cursor.execute("""
                     SELECT v.id, v.fecha_corta, c.nombre, v.producto, v.total, v.pagado, v.pendiente 
                     FROM ventas v JOIN clientes c ON v.cliente_id = c.id WHERE v.pendiente > 0 ORDER BY v.id DESC
                 """)
                 deudas = db.cursor.fetchall()
-            except Exception as ex:
-                print(f"Error SQL deudas: {ex}")
-                deudas = []
+                suma_global = 0.0
 
-            dt_deudas.rows.clear()
-            lista_deudas = ft.Column([], spacing=6)
-            suma_global = 0.0
+                for r in deudas:
+                    v_id, fecha, cliente, producto, total, pagado, pendiente = r
+                    suma_global += pendiente
 
-            for r in deudas:
-                v_id, fecha, cliente, producto, total, pagado, pendiente = r
-                suma_global += pendiente
+                    def abono_fn(e, vid=v_id, cname=cliente, pend=pendiente):
+                        abrir_dialogo_abono(vid, cname, pend)
 
-                def abono_fn(e, vid=v_id, cname=cliente, pend=pendiente):
-                    abrir_dialogo_abono(vid, cname, pend)
+                    if page.width <= 700:
+                        card_deuda = ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Text(f"{cliente}", weight=ft.FontWeight.BOLD, size=13, color=C_TEXTO_NEGRO),
+                                    ft.Text(f"Debe: Q {pendiente:.2f}", weight=ft.FontWeight.BOLD, size=13, color=ft.colors.RED_700)
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Text(f"Detalle: {producto} ({fecha})", size=11, color=ft.colors.GREY_700),
+                                ft.Row([
+                                    ft.ElevatedButton("💰 Abonar", icon=ft.icons.PAYMENTS, icon_size=14, on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
+                                ], alignment=ft.MainAxisAlignment.END)
+                            ], spacing=2),
+                            padding=6,
+                            margin=ft.margin.symmetric(vertical=2),
+                            border=ft.border.all(1, C_GRIS_BORDE),
+                            border_radius=6,
+                            bgcolor=C_BLANCO
+                        )
+                        lista_deudas.controls.append(card_deuda)
+                    else:
+                        dt_deudas.rows.append(
+                            ft.DataRow(cells=[
+                                ft.DataCell(ft.Text(str(v_id), color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(fecha, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(cliente, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(producto, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {total:.2f}", color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {pagado:.2f}", color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {pendiente:.2f}", color=ft.colors.RED_700, weight=ft.FontWeight.BOLD)),
+                                ft.DataCell(ft.ElevatedButton("💰", on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)),
+                            ])
+                        )
+
+                lbl_total_deudas_global.value = f"Pendiente Global: Q {suma_global:.2f}"
 
                 if page.width <= 700:
-                    card_deuda = ft.Container(
-                        content=ft.Column([
-                            ft.Row([
-                                ft.Text(f"{cliente}", weight=ft.FontWeight.BOLD, size=13, color=C_TEXTO_NEGRO),
-                                ft.Text(f"Debe: Q {pendiente:.2f}", weight=ft.FontWeight.BOLD, size=13, color=ft.colors.RED_700)
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                            ft.Text(f"Detalle: {producto} ({fecha})", size=11, color=ft.colors.GREY_700),
-                            ft.Row([
-                                ft.ElevatedButton("💰 Abonar", icon=ft.icons.PAYMENTS, icon_size=14, on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
-                            ], alignment=ft.MainAxisAlignment.END)
-                        ], spacing=2),
-                        padding=6,
-                        margin=ft.margin.symmetric(vertical=2),
-                        border=ft.border.all(1, C_GRIS_BORDE),
-                        border_radius=6,
-                        bgcolor=C_BLANCO
-                    )
-                    lista_deudas.controls.append(card_deuda)
-                else:
-                    dt_deudas.rows.append(
-                        ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(str(v_id), color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(fecha, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(cliente, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(producto, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {total:.2f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {pagado:.2f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {pendiente:.2f}", color=ft.colors.RED_700, weight=ft.FontWeight.BOLD)),
-                            ft.DataCell(ft.ElevatedButton("💰", on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)),
-                        ])
-                    )
-
-            lbl_total_deudas_global.value = f"Pendiente Global: Q {suma_global:.2f}"
-
-            if page.width <= 700:
-                if not deudas:
-                    lista_deudas.controls.append(
-                        ft.Container(
-                            content=ft.Text("🎉 No hay deudas pendientes.", size=13, color=C_TEXTO_NEGRO),
-                            padding=12, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                    if not deudas:
+                        lista_deudas.controls.append(
+                            ft.Container(
+                                content=ft.Text("No hay deudas pendientes.", size=14, color=C_TEXTO_NEGRO),
+                                padding=12, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                            )
                         )
-                    )
-                contenedor_cuerpo_deudas.content = lista_deudas
-            else:
-                contenedor_cuerpo_deudas.content = ft.ListView([dt_deudas], expand=True)
+                    contenedor_cuerpo_deudas.content = lista_deudas
+                else:
+                    contenedor_cuerpo_deudas.content = ft.ListView([dt_deudas], expand=True)
 
-            page.update()
+                page.update()
+            except Exception as ex:
+                print(f"Error deudas: {ex}")
+                contenedor_cuerpo_deudas.content = ft.Container(
+                    content=ft.Text("No se pudieron cargar las deudas.", size=13, color=ft.colors.RED_700),
+                    padding=12, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                )
+                page.update()
 
         def verificar_cierres_olvidados():
             hoy = datetime.date.today()
@@ -1283,14 +1286,14 @@ def main(page: ft.Page):
                     lbl_fecha,
                     ft.IconButton(icon=ft.icons.ARROW_FORWARD_IOS, icon_size=12, on_click=lambda e: cambiar_dia(1)),
                     badge_estado,
-                ], alignment=ft.MainAxisAlignment.CENTER, spacing=2, wrap=True),
+                ], alignment=ft.MainAxisAlignment.CENTER, spacing=2),
                 ft.Row([lbl_caja_total, btn_sync], spacing=2)
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True),
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             padding=6, bgcolor=C_GRIS_FONDO, border_radius=8, border=ft.border.all(1, C_GRIS_BORDE)
         )
 
         action_bar = ft.Container(
-            content=ft.Row([lbl_banner_texto, ft.Row([btn_carrusel, btn_cerrar_caja, btn_abrir_caja], spacing=4, wrap=True)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True),
+            content=ft.Row([lbl_banner_texto, ft.Row([btn_carrusel, btn_cerrar_caja, btn_abrir_caja], spacing=4)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             padding=2
         )
 
