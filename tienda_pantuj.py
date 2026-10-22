@@ -3,6 +3,7 @@ import datetime
 import os
 import shutil
 import csv
+import io
 import flet as ft
 
 # ==========================================================================
@@ -186,7 +187,6 @@ def main(page: ft.Page):
             padding=2, expand=True
         )
 
-        # Campos de edición de cobros del día
         tf_edit_v_prod = ft.TextField(label="Detalle / Producto", border_radius=8)
         tf_edit_v_total = ft.TextField(label="Total (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
         tf_edit_v_efectivo = ft.TextField(label="Efectivo Recibido (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
@@ -566,6 +566,87 @@ def main(page: ft.Page):
             rows=[]
         )
 
+        def generar_csv_excel(e):
+            f_ini = tf_hist_inicio.value.strip()
+            f_fin = tf_hist_fin.value.strip()
+
+            try:
+                # Obtención de datos resumidos
+                db.cursor.execute("SELECT SUM(pagado) FROM ventas WHERE fecha_corta BETWEEN %s AND %s", (f_ini, f_fin))
+                total_ingresos = db.cursor.fetchone()[0] or 0.0
+
+                db.cursor.execute("SELECT SUM(monto) FROM gastos WHERE fecha_corta BETWEEN %s AND %s", (f_ini, f_fin))
+                total_gastos = db.cursor.fetchone()[0] or 0.0
+
+                caja_fisica = total_ingresos - total_gastos
+
+                # Obtener desglose diario
+                dias_semana_esp = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+                
+                db.cursor.execute("""
+                    SELECT DISTINCT fecha_corta FROM ventas WHERE fecha_corta BETWEEN %s AND %s
+                    UNION SELECT fecha_corta FROM gastos WHERE fecha_corta BETWEEN %s AND %s 
+                    ORDER BY fecha_corta ASC
+                """, (f_ini, f_fin, f_ini, f_fin))
+                fechas_rango = db.cursor.fetchall()
+
+                filas_desglose = []
+                for f_item in fechas_rango:
+                    f_str = f_item[0]
+                    dt_f = datetime.datetime.strptime(f_str, "%Y-%m-%d").date()
+                    nom_dia = dias_semana_esp[dt_f.weekday()]
+
+                    db.cursor.execute("SELECT SUM(pagado) FROM ventas WHERE fecha_corta=%s", (f_str,))
+                    ing_dia = db.cursor.fetchone()[0] or 0.0
+
+                    db.cursor.execute("SELECT SUM(monto) FROM gastos WHERE fecha_corta=%s", (f_str,))
+                    gas_dia = db.cursor.fetchone()[0] or 0.0
+
+                    neto_dia = ing_dia - gas_dia
+                    filas_desglose.append([f_str, nom_dia, f"Q {ing_dia:.2f}", f"Q {gas_dia:.2f}", f"Q {neto_dia:.2f}"])
+
+                # Obtener deudas
+                db.cursor.execute("""
+                    SELECT c.nombre, v.producto, v.pendiente, v.fecha_corta 
+                    FROM ventas v JOIN clientes c ON v.cliente_id = c.id 
+                    WHERE v.pendiente > 0 ORDER BY v.id DESC
+                """)
+                deudas_filas = db.cursor.fetchall()
+                total_deudas = sum([d[2] for d in deudas_filas])
+
+                # Construir archivo CSV/Excel en memoria
+                buffer = io.StringIO()
+                writer = csv.writer(buffer)
+
+                writer.writerow(["REPORTE CONSOLIDADO TIENDA PANTUJ"])
+                writer.writerow([f"RANGO DEL REPORTE: {f_ini} AL {f_fin}"])
+                writer.writerow([])
+                
+                writer.writerow(["FECHA", "DÍA", "TOTAL RECAUDADO (Q)", "GASTOS / RETIROS (Q)", "NETO DEL DÍA (Q)"])
+                for row in filas_desglose:
+                    writer.writerow(row)
+
+                writer.writerow([])
+                writer.writerow(["--- RESUMEN GENERAL ---"])
+                writer.writerow(["TOTAL INGRESO BRUTO RECAUDADO", f"Q {total_ingresos:.2f}"])
+                writer.writerow(["TOTAL GASTOS / EGRESOS", f"Q {total_gastos:.2f}"])
+                writer.writerow(["TOTAL ESPERADO EN CAJA FÍSICA", f"Q {caja_fisica:.2f}"])
+                writer.writerow([])
+
+                writer.writerow(["--- LISTADO DE DEUDAS VIGENTES ---"])
+                writer.writerow(["CLIENTE", "DETALLE TRABAJO", "FECHA", "MONTO PENDIENTE (Q)"])
+                for d in deudas_filas:
+                    writer.writerow([d[0], d[1], d[3], f"Q {d[2]:.2f}"])
+                
+                writer.writerow(["TOTAL DEUDAS GLOBAL", "", "", f"Q {total_deudas:.2f}"])
+
+                # Descarga web desde la versión PC
+                contenido_bytes = buffer.getvalue().encode('utf-8-sig')
+                page.download(f"Reporte_Tienda_Pantuj_{f_ini}_al_{f_fin}.csv", contenido_bytes)
+                mostrar_snack("📥 Descargando archivo Excel/CSV...")
+            except Exception as ex:
+                mostrar_snack(f"Error al exportar Excel: {ex}", es_error=True)
+
         def procesar_historial_rango(e):
             f_ini = tf_hist_inicio.value.strip()
             f_fin = tf_hist_fin.value.strip()
@@ -618,7 +699,10 @@ def main(page: ft.Page):
         tab_historial = ft.Container(
             content=ft.Column([
                 ft.Row([tf_hist_inicio, tf_hist_fin], spacing=4),
-                ft.ElevatedButton("📊 Procesar Reporte", icon=ft.icons.ANALYTICS, on_click=procesar_historial_rango, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO),
+                ft.Row([
+                    ft.ElevatedButton("📊 Procesar Reporte", icon=ft.icons.ANALYTICS, on_click=procesar_historial_rango, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO),
+                    ft.ElevatedButton("📥 Exportar Reporte Excel (CSV)", icon=ft.icons.EXCEL if hasattr(ft.icons, "EXCEL") else ft.icons.DOWNLOAD, on_click=generar_csv_excel, bgcolor=ft.colors.GREEN_800, color=C_BLANCO)
+                ], spacing=6),
                 ft.Divider(color=C_GRIS_BORDE),
                 ft.Container(
                     content=ft.Column([ft.Text("📊 Métricas", size=12, weight=ft.FontWeight.BOLD), dt_resumen_macro]),
@@ -705,12 +789,14 @@ def main(page: ft.Page):
         col_form_carrusel = ft.Column([tf_car_desc, tf_car_total, tf_car_pago, lbl_car_alerta, tf_car_abono_v], visible=False, spacing=6)
         col_preg_carrusel = ft.Column([], visible=True, spacing=6)
 
+        # Modal optimizado para pantallas táctiles evitando desplazamiento por teclado móvil
         dialog_carrusel = ft.AlertDialog(
             title=ft.Row([ft.Text("⚡ Carrusel", weight=ft.FontWeight.BOLD), lbl_car_idx], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             content=ft.Container(
                 content=ft.Column([lbl_car_name, lbl_car_info, ft.Divider(color=C_GRIS_BORDE), col_preg_carrusel, col_form_carrusel], spacing=6, scroll=ft.ScrollMode.AUTO),
                 padding=4,
-                width=320
+                width=320,
+                max_height=360
             ),
             actions=[]
         )
