@@ -513,7 +513,9 @@ def main(page: ft.Page):
 
         lbl_total_deudas_global = ft.Text("Pendiente Global: Q 0.00", size=13, weight=ft.FontWeight.BOLD, color=ft.colors.RED_700)
 
-        lista_deudas_movil = ft.Column([], expand=True, spacing=6, scroll=ft.ScrollMode.AUTO, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+        # Contenedor dinámico único para la pestaña de deudas
+        contenedor_cuerpo_deudas = ft.Container(expand=True)
+
         dt_deudas = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("ID", weight=ft.FontWeight.BOLD)),
@@ -528,9 +530,6 @@ def main(page: ft.Page):
             rows=[]
         )
 
-        vista_deudas_movil = ft.Container(content=lista_deudas_movil, expand=True, visible=page.width <= 700, padding=ft.padding.only(left=2, right=2, top=4, bottom=4))
-        vista_deudas_pc = ft.Container(content=ft.ListView([dt_deudas], expand=True), expand=True, visible=page.width > 700)
-
         tab_deudas = ft.Container(
             content=ft.Column([
                 ft.Row([
@@ -538,8 +537,7 @@ def main(page: ft.Page):
                     ft.IconButton(icon=ft.icons.REFRESH, on_click=lambda e: cargar_tabla_deudas(), tooltip="Actualizar")
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Divider(color=C_GRIS_BORDE),
-                vista_deudas_movil,
-                vista_deudas_pc,
+                contenedor_cuerpo_deudas,
             ], expand=True),
             padding=6, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO, expand=True
         )
@@ -1112,7 +1110,8 @@ def main(page: ft.Page):
 
         def cargar_tabla_deudas():
             dt_deudas.rows.clear()
-            lista_deudas_movil.controls.clear()
+            lista_deudas = ft.Column([], spacing=6, scroll=ft.ScrollMode.AUTO)
+            
             try:
                 db.cursor.execute("""
                     SELECT v.id, v.fecha_corta, c.nombre, v.producto, v.total, v.pagado, v.pendiente 
@@ -1120,6 +1119,7 @@ def main(page: ft.Page):
                 """)
                 deudas = db.cursor.fetchall()
                 suma_global = 0.0
+
                 for r in deudas:
                     v_id, fecha, cliente, producto, total, pagado, pendiente = r
                     suma_global += pendiente
@@ -1127,59 +1127,59 @@ def main(page: ft.Page):
                     def abono_fn(e, vid=v_id, cname=cliente, pend=pendiente):
                         abrir_dialogo_abono(vid, cname, pend)
 
-                    card_deuda = ft.Container(
-                        content=ft.Column([
-                            ft.Row([
-                                ft.Text(f"{cliente}", weight=ft.FontWeight.BOLD, size=13, color=C_TEXTO_NEGRO),
-                                ft.Text(f"Debe: Q {pendiente:.2f}", weight=ft.FontWeight.BOLD, size=13, color=ft.colors.RED_700)
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                            ft.Text(f"Detalle: {producto} ({fecha})", size=11, color=ft.colors.GREY_700),
-                            ft.Row([
-                                ft.ElevatedButton("💰 Abonar", icon=ft.icons.PAYMENTS, icon_size=14, on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
-                            ], alignment=ft.MainAxisAlignment.END)
-                        ], spacing=2),
-                        padding=6,
-                        margin=ft.margin.symmetric(vertical=2),
-                        border=ft.border.all(1, C_GRIS_BORDE),
-                        border_radius=6,
-                        bgcolor=C_BLANCO
-                    )
-                    lista_deudas_movil.controls.append(card_deuda)
-                    dt_deudas.rows.append(
-                        ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(str(v_id), color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(fecha, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(cliente, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(producto, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {total:.2f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {pagado:.2f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {pendiente:.2f}", color=ft.colors.RED_700, weight=ft.FontWeight.BOLD)),
-                            ft.DataCell(ft.ElevatedButton("💰", on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)),
-                        ])
-                    )
-                lbl_total_deudas_global.value = f"Pendiente Global: Q {suma_global:.2f}"
-                if not deudas:
-                    lista_deudas_movil.controls.append(
-                        ft.Container(
-                            content=ft.Text("No hay deudas pendientes.", size=14, color=C_TEXTO_NEGRO),
-                            padding=12,
+                    if page.width <= 700:
+                        card_deuda = ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Text(f"{cliente}", weight=ft.FontWeight.BOLD, size=13, color=C_TEXTO_NEGRO),
+                                    ft.Text(f"Debe: Q {pendiente:.2f}", weight=ft.FontWeight.BOLD, size=13, color=ft.colors.RED_700)
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Text(f"Detalle: {producto} ({fecha})", size=11, color=ft.colors.GREY_700),
+                                ft.Row([
+                                    ft.ElevatedButton("💰 Abonar", icon=ft.icons.PAYMENTS, icon_size=14, on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
+                                ], alignment=ft.MainAxisAlignment.END)
+                            ], spacing=2),
+                            padding=6,
+                            margin=ft.margin.symmetric(vertical=2),
                             border=ft.border.all(1, C_GRIS_BORDE),
-                            border_radius=8,
-                            bgcolor=C_BLANCO,
+                            border_radius=6,
+                            bgcolor=C_BLANCO
                         )
-                    )
+                        lista_deudas.controls.append(card_deuda)
+                    else:
+                        dt_deudas.rows.append(
+                            ft.DataRow(cells=[
+                                ft.DataCell(ft.Text(str(v_id), color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(fecha, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(cliente, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(producto, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {total:.2f}", color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {pagado:.2f}", color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {pendiente:.2f}", color=ft.colors.RED_700, weight=ft.FontWeight.BOLD)),
+                                ft.DataCell(ft.ElevatedButton("💰", on_click=abono_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)),
+                            ])
+                        )
+
+                lbl_total_deudas_global.value = f"Pendiente Global: Q {suma_global:.2f}"
+
+                if page.width <= 700:
+                    if not deudas:
+                        lista_deudas.controls.append(
+                            ft.Container(
+                                content=ft.Text("No hay deudas pendientes.", size=14, color=C_TEXTO_NEGRO),
+                                padding=12, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
+                            )
+                        )
+                    contenedor_cuerpo_deudas.content = lista_deudas
+                else:
+                    contenedor_cuerpo_deudas.content = ft.ListView([dt_deudas], expand=True)
+
                 page.update()
             except Exception as ex:
                 print(f"Error deudas: {ex}")
-                lista_deudas_movil.controls.clear()
-                lista_deudas_movil.controls.append(
-                    ft.Container(
-                        content=ft.Text("No se pudieron cargar las deudas. Revisa los Logs de Render.", size=13, color=ft.colors.RED_700),
-                        padding=12,
-                        border=ft.border.all(1, C_GRIS_BORDE),
-                        border_radius=8,
-                        bgcolor=C_BLANCO,
-                    )
+                contenedor_cuerpo_deudas.content = ft.Container(
+                    content=ft.Text("No se pudieron cargar las deudas.", size=13, color=ft.colors.RED_700),
+                    padding=12, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 )
                 page.update()
 
@@ -1338,23 +1338,23 @@ def main(page: ft.Page):
         ], spacing=4)
 
         nav_container_mobile = ft.Column([nav_row_1, nav_row_2], spacing=4)
-        menu_activo = nav_buttons_pc if page.width > 700 else nav_container_mobile
+
+        contenedor_menu = ft.Container(
+            content=nav_buttons_pc if page.width > 700 else nav_container_mobile
+        )
 
         main_layout = ft.Column([
             header_bar,
             container_alerta_cierres,
             action_bar,
-            menu_activo,
+            contenedor_menu,
             ft.Container(content=content_area, expand=True)
         ], expand=True, spacing=6)
 
         def ajustar_vista_por_tamano(e=None):
             es_movil = page.width <= 700
-            vista_deudas_movil.visible = es_movil
-            vista_deudas_pc.visible = not es_movil
-            
-            nonlocal menu_activo
-            menu_activo.controls = nav_buttons_pc.controls if not es_movil else nav_container_mobile.controls
+            contenedor_menu.content = nav_container_mobile if es_movil else nav_buttons_pc
+            cargar_tabla_deudas()
             page.update()
 
         page.on_resize = ajustar_vista_por_tamano
