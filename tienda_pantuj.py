@@ -571,7 +571,6 @@ def main(page: ft.Page):
             f_fin = tf_hist_fin.value.strip()
 
             try:
-                # Obtención de datos resumidos
                 db.cursor.execute("SELECT SUM(pagado) FROM ventas WHERE fecha_corta BETWEEN %s AND %s", (f_ini, f_fin))
                 total_ingresos = db.cursor.fetchone()[0] or 0.0
 
@@ -580,7 +579,6 @@ def main(page: ft.Page):
 
                 caja_fisica = total_ingresos - total_gastos
 
-                # Obtener desglose diario
                 dias_semana_esp = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
                 
                 db.cursor.execute("""
@@ -605,7 +603,6 @@ def main(page: ft.Page):
                     neto_dia = ing_dia - gas_dia
                     filas_desglose.append([f_str, nom_dia, f"Q {ing_dia:.2f}", f"Q {gas_dia:.2f}", f"Q {neto_dia:.2f}"])
 
-                # Obtener deudas
                 db.cursor.execute("""
                     SELECT c.nombre, v.producto, v.pendiente, v.fecha_corta 
                     FROM ventas v JOIN clientes c ON v.cliente_id = c.id 
@@ -614,7 +611,6 @@ def main(page: ft.Page):
                 deudas_filas = db.cursor.fetchall()
                 total_deudas = sum([d[2] for d in deudas_filas])
 
-                # Construir archivo CSV/Excel en memoria
                 buffer = io.StringIO()
                 writer = csv.writer(buffer)
 
@@ -640,7 +636,6 @@ def main(page: ft.Page):
                 
                 writer.writerow(["TOTAL DEUDAS GLOBAL", "", "", f"Q {total_deudas:.2f}"])
 
-                # Descarga web desde la versión PC
                 contenido_bytes = buffer.getvalue().encode('utf-8-sig')
                 page.download(f"Reporte_Tienda_Pantuj_{f_ini}_al_{f_fin}.csv", contenido_bytes)
                 mostrar_snack("📥 Descargando archivo Excel/CSV...")
@@ -701,7 +696,7 @@ def main(page: ft.Page):
                 ft.Row([tf_hist_inicio, tf_hist_fin], spacing=4),
                 ft.Row([
                     ft.ElevatedButton("📊 Procesar Reporte", icon=ft.icons.ANALYTICS, on_click=procesar_historial_rango, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO),
-                    ft.ElevatedButton("📥 Exportar Reporte Excel (CSV)", icon=ft.icons.EXCEL if hasattr(ft.icons, "EXCEL") else ft.icons.DOWNLOAD, on_click=generar_csv_excel, bgcolor=ft.colors.GREEN_800, color=C_BLANCO)
+                    ft.ElevatedButton("📥 Exportar Reporte Excel (CSV)", icon=ft.icons.DOWNLOAD, on_click=generar_csv_excel, bgcolor=ft.colors.GREEN_800, color=C_BLANCO)
                 ], spacing=6),
                 ft.Divider(color=C_GRIS_BORDE),
                 ft.Container(
@@ -789,7 +784,6 @@ def main(page: ft.Page):
         col_form_carrusel = ft.Column([tf_car_desc, tf_car_total, tf_car_pago, lbl_car_alerta, tf_car_abono_v], visible=False, spacing=6)
         col_preg_carrusel = ft.Column([], visible=True, spacing=6)
 
-        # Modal optimizado para pantallas táctiles evitando desplazamiento por teclado móvil
         dialog_carrusel = ft.AlertDialog(
             title=ft.Row([ft.Text("⚡ Carrusel", weight=ft.FontWeight.BOLD), lbl_car_idx], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             content=ft.Container(
