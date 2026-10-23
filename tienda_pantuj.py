@@ -1,4 +1,5 @@
 import psycopg2
+from psycopg2 import pool
 import datetime
 import os
 import shutil
@@ -6,79 +7,96 @@ import csv
 import flet as ft
 
 # ==========================================================================
-# 1. BASE DE DATOS - POSTGRESQL (NEON)
+# 1. BASE DE DATOS - POSTGRESQL CON CONNECTION POOL (NEON)
 # ==========================================================================
 class Database:
     def __init__(self):
         self.db_url = "postgresql://neondb_owner:npg_k95jPxErNLgZ@ep-holy-cherry-b8dz8gf1.c-14.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-        self.conn = None
-        self.cursor = None
-        self.conectar()
+        self.pool = None
+        self.inicializar_pool()
 
-    def conectar(self):
+    def inicializar_pool(self):
         try:
-            if self.conn is None or self.conn.closed != 0:
-                self.conn = psycopg2.connect(self.db_url, connect_timeout=10)
-                self.cursor = self.conn.cursor()
-                self.crear_tablas()
+            self.pool = psycopg2.pool.SimpleConnectionPool(
+                minconn=1,
+                maxconn=10,
+                dsn=self.db_url,
+                connect_timeout=10
+            )
+            self.crear_tablas()
         except Exception as e:
-            if self.conn:
-                self.conn.close()
             raise RuntimeError(f"No se pudo conectar con Neon: {e}") from e
 
-    def asegurar_conexion(self):
+    def get_conn(self):
         try:
-            if self.conn is None or self.conn.closed != 0:
-                self.conectar()
-            else:
-                self.cursor.execute("SELECT 1;")
+            conn = self.pool.getconn()
+            if conn.closed != 0:
+                self.pool.putconn(conn, close=True)
+                conn = self.pool.getconn()
+            # Test simple para reanimar conexion muerta por timeout
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1;")
+            return conn
         except Exception:
-            self.conectar()
+            self.inicializar_pool()
+            return self.pool.getconn()
+
+    def release_conn(self, conn):
+        if conn:
+            self.pool.putconn(conn)
 
     def crear_tablas(self):
+        conn = self.get_conn()
         try:
-            self.cursor.execute("""
-                CREATE TABLE IF NOT EXISTS clientes (
-                    id SERIAL PRIMARY KEY,
-                    nombre TEXT UNIQUE,
-                    servicio TEXT,
-                    precio REAL DEFAULT 0,
-                    notas TEXT
-                );
-                CREATE TABLE IF NOT EXISTS ventas (
-                    id SERIAL PRIMARY KEY,
-                    cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
-                    producto TEXT,
-                    total REAL,
-                    pagado REAL,
-                    pendiente REAL,
-                    fecha_corta TEXT,
-                    fecha_iso TEXT
-                );
-                CREATE TABLE IF NOT EXISTS gastos (
-                    id SERIAL PRIMARY KEY,
-                    descripcion TEXT,
-                    monto REAL,
-                    fecha_corta TEXT
-                );
-                CREATE TABLE IF NOT EXISTS blacklist (
-                    id SERIAL PRIMARY KEY,
-                    cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
-                    fecha_corta TEXT,
-                    motivo TEXT
-                );
-                CREATE TABLE IF NOT EXISTS cierres (
-                    fecha_corta TEXT PRIMARY KEY,
-                    fondo_inicial REAL DEFAULT 0
-                );
-                CREATE TABLE IF NOT EXISTS fondo_caja (
-                    fecha_corta TEXT PRIMARY KEY,
-                    monto REAL DEFAULT 0
-                );
-            """)
-            self.conn.commit()
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS clientes (
+                        id SERIAL PRIMARY KEY,
+                        nombre TEXT UNIQUE,
+                        servicio TEXT,
+                        precio REAL DEFAULT 0,
+                        notas TEXT
+                    );
+                    CREATE TABLE IF NOT EXISTS ventas (
+                        id SERIAL PRIMARY KEY,
+                        cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
+                        producto TEXT,
+                        total REAL,
+                        pagado REAL,
+                        pendiente REAL,
+                        fecha_corta TEXT,
+                        fecha_iso TEXT
+                    );
+                    CREATE TABLE IF NOT EXISTS gastos (
+                        id SERIAL PRIMARY KEY,
+                        descripcion TEXT,
+                        monto REAL,
+                        fecha_corta TEXT
+                    );
+                    CREATE TABLE IF NOT EXISTS blacklist (
+                        id SERIAL PRIMARY KEY,
+                        cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
+                        fecha_corta TEXT,
+                        motivo TEXT
+                    );
+                    CREATE TABLE IF NOT EXISTS cierres (
+                        fecha_corta TEXT PRIMARY KEY,
+                        fondo_inicial REAL DEFAULT 0
+                    );
+                    CREATE TABLE IF NOT EXISTS fondo_caja (
+                        fecha_corta TEXT PRIMARY KEY,
+                        monto REAL DEFAULT 0
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_ventas_cliente_id ON ventas(cliente_id);
+                    CREATE INDEX IF NOT EXISTS idx_ventas_fecha_corta ON ventas(fecha_corta);
+                    CREATE INDEX IF NOT EXISTS idx_gastos_fecha_corta ON gastos(fecha_corta);
+                """)
+                conn.commit()
         except Exception as e:
-            print(f"Error al crear tablas en Neon: {e}")
+            conn.rollback()
+            print(f"Error al crear tablas/índices en Neon: {e}")
+        finally:
+            self.release_conn(conn)
 
 # ==========================================================================
 # 2. APLICACIÓN PRINCIPAL FLET ADAPTATIVA (PC Y MÓVIL)
@@ -98,7 +116,6 @@ def main(page: ft.Page):
     C_TEXTO_NEGRO = ft.colors.BLACK
     C_BLANCO = ft.colors.WHITE
 
-    # FilePicker para guardar el reporte en la carpeta que elija el usuario
     file_picker_guardar = ft.FilePicker()
     page.overlay.append(file_picker_guardar)
 
@@ -127,10 +144,14 @@ def main(page: ft.Page):
         }
 
         def es_dia_congelado():
-            db.asegurar_conexion()
-            fecha_str = estado["fecha"].strftime("%Y-%m-%d")
-            db.cursor.execute("SELECT 1 FROM cierres WHERE fecha_corta=%s", (fecha_str,))
-            return db.cursor.fetchone() is not None
+            conn = db.get_conn()
+            try:
+                with conn.cursor() as cur:
+                    fecha_str = estado["fecha"].strftime("%Y-%m-%d")
+                    cur.execute("SELECT 1 FROM cierres WHERE fecha_corta=%s", (fecha_str,))
+                    return cur.fetchone() is not None
+            finally:
+                db.release_conn(conn)
 
         def cerrar_dialogo_seguro(dlg):
             try:
@@ -138,6 +159,31 @@ def main(page: ft.Page):
                 page.update()
             except Exception as ex:
                 print(f"No se pudo cerrar el diálogo: {ex}")
+
+        # DIÁLOGO REUTILIZABLE PARA CONFIRMACIÓN DE ELIMINACIÓN
+        lbl_confirma_msg = ft.Text("", size=13, weight=ft.FontWeight.BOLD)
+        dialog_confirmar_eliminar = ft.AlertDialog(
+            title=ft.Text("⚠️ Confirmar Eliminación", weight=ft.FontWeight.BOLD),
+            content=ft.Container(content=lbl_confirma_msg, padding=4, width=300),
+            actions=[]
+        )
+
+        def pedir_confirmacion_eliminacion(mensaje, callback_confirmar):
+            cerrar_dialogo_seguro(dialog_confirmar_eliminar)
+            lbl_confirma_msg.value = mensaje
+            
+            def accion_si(e):
+                cerrar_dialogo_seguro(dialog_confirmar_eliminar)
+                callback_confirmar()
+
+            dialog_confirmar_eliminar.actions = [
+                ft.TextButton("Cancelar", on_click=lambda e: cerrar_dialogo_seguro(dialog_confirmar_eliminar)),
+                ft.ElevatedButton("Sí, Eliminar", on_click=accion_si, bgcolor=ft.colors.RED_700, color=C_BLANCO)
+            ]
+            if dialog_confirmar_eliminar not in page.overlay:
+                page.overlay.append(dialog_confirmar_eliminar)
+            dialog_confirmar_eliminar.open = True
+            page.update()
 
         txt_titulo = ft.Text("🏪 Tienda Pantuj", size=15, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
         lbl_fecha = ft.Text("", size=11, weight=ft.FontWeight.BOLD, color=C_TEXTO_NEGRO)
@@ -244,18 +290,21 @@ def main(page: ft.Page):
                 prod_nuevo = tf_edit_v_prod.value.strip()
                 pend_nuevo = max(0.0, tot_nuevo - p_nuevo)
 
+                conn = db.get_conn()
                 try:
-                    db.asegurar_conexion()
-                    db.cursor.execute("""
-                        UPDATE ventas SET producto=%s, total=%s, pagado=%s, pendiente=%s WHERE id=%s
-                    """, (prod_nuevo, tot_nuevo, p_nuevo, pend_nuevo, estado["edit_venta_id"]))
-                    db.conn.commit()
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            UPDATE ventas SET producto=%s, total=%s, pagado=%s, pendiente=%s WHERE id=%s
+                        """, (prod_nuevo, tot_nuevo, p_nuevo, pend_nuevo, estado["edit_venta_id"]))
+                        conn.commit()
                     cerrar_dialogo_seguro(dialog_editar_venta)
                     mostrar_snack("Cobro actualizado correctamente.")
                     refrescar_pantallas()
                 except Exception as ex:
-                    db.conn.rollback()
+                    conn.rollback()
                     mostrar_snack(f"Error al actualizar: {ex}", es_error=True)
+                finally:
+                    db.release_conn(conn)
 
             dialog_editar_venta.actions = [
                 ft.TextButton("Cancelar", on_click=lambda e: cerrar_dialogo_seguro(dialog_editar_venta)),
@@ -291,11 +340,15 @@ def main(page: ft.Page):
                 if monto < 0:
                     raise ValueError()
                 fecha_str = estado["fecha"].strftime("%Y-%m-%d")
-                db.asegurar_conexion()
-                db.cursor.execute("INSERT INTO fondo_caja (fecha_corta, monto) VALUES (%s, %s) ON CONFLICT (fecha_corta) DO UPDATE SET monto = EXCLUDED.monto", (fecha_str, monto))
-                db.conn.commit()
-                mostrar_snack("Fondo inicial asignado.")
-                refrescar_pantallas()
+                conn = db.get_conn()
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute("INSERT INTO fondo_caja (fecha_corta, monto) VALUES (%s, %s) ON CONFLICT (fecha_corta) DO UPDATE SET monto = EXCLUDED.monto", (fecha_str, monto))
+                        conn.commit()
+                    mostrar_snack("Fondo inicial asignado.")
+                    refrescar_pantallas()
+                finally:
+                    db.release_conn(conn)
             except ValueError:
                 mostrar_snack("Ingresa un monto válido y positivo.", es_error=True)
 
@@ -411,17 +464,18 @@ def main(page: ft.Page):
                 return
 
             notas = tf_cli_notas.value.strip() if tf_cli_notas.value else ""
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                if estado["edit_client_id"]:
-                    db.cursor.execute("UPDATE clientes SET nombre=%s, servicio=%s, precio=%s, notas=%s WHERE id=%s",
-                                      (nombre, servicio, precio, notas, estado["edit_client_id"]))
-                    mostrar_snack("Cliente actualizado.")
-                else:
-                    db.cursor.execute("INSERT INTO clientes (nombre, servicio, precio, notas) VALUES (%s, %s, %s, %s)",
-                                      (nombre, servicio, precio, notas))
-                    mostrar_snack("Cliente guardado.")
-                db.conn.commit()
+                with conn.cursor() as cur:
+                    if estado["edit_client_id"]:
+                        cur.execute("UPDATE clientes SET nombre=%s, servicio=%s, precio=%s, notas=%s WHERE id=%s",
+                                    (nombre, servicio, precio, notas, estado["edit_client_id"]))
+                        mostrar_snack("Cliente actualizado.")
+                    else:
+                        cur.execute("INSERT INTO clientes (nombre, servicio, precio, notas) VALUES (%s, %s, %s, %s)",
+                                    (nombre, servicio, precio, notas))
+                        mostrar_snack("Cliente guardado.")
+                    conn.commit()
                 
                 cerrar_dialogo_seguro(dialog_cliente)
                 tf_cli_nombre.value = ""
@@ -431,8 +485,10 @@ def main(page: ft.Page):
                 
                 cargar_tabla_clientes()
             except Exception as ex:
-                db.conn.rollback()
+                conn.rollback()
                 mostrar_snack(f"Error al guardar: {ex}", es_error=True)
+            finally:
+                db.release_conn(conn)
 
         def ver_historial_cliente(cid, nombre, notas):
             cerrar_dialogo_seguro(dialog_historial)
@@ -440,28 +496,31 @@ def main(page: ft.Page):
 
             dt_historial_cli.rows = []
             lbl_hist_cli_info.value = f"Cliente: {nombre}\nNotas: {notas if notas else 'Ninguna'}"
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("SELECT fecha_corta, producto, pagado, pendiente FROM ventas WHERE cliente_id=%s ORDER BY id DESC", (cid,))
-                ventas = db.cursor.fetchall()
-                if not ventas:
-                    dt_historial_cli.rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text("Sin registros")), ft.DataCell(ft.Text("-")), ft.DataCell(ft.Text("-")), ft.DataCell(ft.Text("-"))]))
-                else:
-                    for v in ventas:
-                        dt_historial_cli.rows.append(
-                            ft.DataRow(cells=[
-                                ft.DataCell(ft.Text(v[0])),
-                                ft.DataCell(ft.Text(v[1])),
-                                ft.DataCell(ft.Text(f"Q {v[2]:.2f}")),
-                                ft.DataCell(ft.Text(f"Q {v[3]:.2f}", color=ft.colors.RED_700 if v[3] > 0 else ft.colors.GREEN_700)),
-                            ])
-                        )
+                with conn.cursor() as cur:
+                    cur.execute("SELECT fecha_corta, producto, pagado, pendiente FROM ventas WHERE cliente_id=%s ORDER BY id DESC", (cid,))
+                    ventas = cur.fetchall()
+                    if not ventas:
+                        dt_historial_cli.rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text("Sin registros")), ft.DataCell(ft.Text("-")), ft.DataCell(ft.Text("-")), ft.DataCell(ft.Text("-"))]))
+                    else:
+                        for v in ventas:
+                            dt_historial_cli.rows.append(
+                                ft.DataRow(cells=[
+                                    ft.DataCell(ft.Text(v[0])),
+                                    ft.DataCell(ft.Text(v[1])),
+                                    ft.DataCell(ft.Text(f"Q {v[2]:.2f}")),
+                                    ft.DataCell(ft.Text(f"Q {v[3]:.2f}", color=ft.colors.RED_700 if v[3] > 0 else ft.colors.GREEN_700)),
+                                ])
+                            )
                 if dialog_historial not in page.overlay:
                     page.overlay.append(dialog_historial)
                 dialog_historial.open = True
                 page.update()
             except Exception as ex:
                 mostrar_snack(f"Error cargando historial: {ex}", es_error=True)
+            finally:
+                db.release_conn(conn)
 
         tab_clientes = ft.Container(
             content=ft.Column([
@@ -505,17 +564,20 @@ def main(page: ft.Page):
                 return
 
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("INSERT INTO gastos (descripcion, monto, fecha_corta) VALUES (%s, %s, %s)", (desc, monto, fecha_str))
-                db.conn.commit()
+                with conn.cursor() as cur:
+                    cur.execute("INSERT INTO gastos (descripcion, monto, fecha_corta) VALUES (%s, %s, %s)", (desc, monto, fecha_str))
+                    conn.commit()
                 tf_gas_desc.value = ""
                 tf_gas_monto.value = ""
                 mostrar_snack("Gasto registrado.")
                 refrescar_pantallas()
             except Exception as ex:
-                db.conn.rollback()
+                conn.rollback()
                 mostrar_snack(f"Error: {ex}", es_error=True)
+            finally:
+                db.release_conn(conn)
 
         tab_gastos = ft.Container(
             content=ft.Column([
@@ -541,6 +603,7 @@ def main(page: ft.Page):
         )
 
         lbl_total_deudas_global = ft.Text("Pendiente Global: Q 0.00", size=13, weight=ft.FontWeight.BOLD, color=ft.colors.RED_700)
+        tf_deudas_buscar = ft.TextField(label="🔍 Buscar Deudor", border_radius=8, expand=True, on_change=lambda e: cargar_tabla_deudas())
 
         dt_deudas = ft.DataTable(
             columns=[
@@ -562,8 +625,9 @@ def main(page: ft.Page):
             content=ft.Column([
                 ft.Row([
                     lbl_total_deudas_global,
+                    tf_deudas_buscar,
                     ft.IconButton(icon=ft.icons.REFRESH, on_click=lambda e: cargar_tabla_deudas(), tooltip="Actualizar")
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, spacing=6),
                 ft.Divider(color=C_GRIS_BORDE),
                 contenedor_cuerpo_deudas,
             ], expand=True),
@@ -593,123 +657,126 @@ def main(page: ft.Page):
         def procesar_historial_rango(e):
             f_ini = tf_hist_inicio.value.strip()
             f_fin = tf_hist_fin.value.strip()
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("SELECT SUM(pagado) FROM ventas WHERE fecha_corta BETWEEN %s AND %s", (f_ini, f_fin))
-                t_ingresos = db.cursor.fetchone()[0] or 0.0
+                with conn.cursor() as cur:
+                    cur.execute("SELECT SUM(pagado) FROM ventas WHERE fecha_corta BETWEEN %s AND %s", (f_ini, f_fin))
+                    t_ingresos = cur.fetchone()[0] or 0.0
 
-                db.cursor.execute("SELECT SUM(monto) FROM gastos WHERE fecha_corta BETWEEN %s AND %s", (f_ini, f_fin))
-                t_gastos = db.cursor.fetchone()[0] or 0.0
+                    cur.execute("SELECT SUM(monto) FROM gastos WHERE fecha_corta BETWEEN %s AND %s", (f_ini, f_fin))
+                    t_gastos = cur.fetchone()[0] or 0.0
 
-                db.cursor.execute("SELECT SUM(pendiente) FROM ventas WHERE fecha_corta BETWEEN %s AND %s", (f_ini, f_fin))
-                t_pendientes = db.cursor.fetchone()[0] or 0.0
+                    cur.execute("SELECT SUM(pendiente) FROM ventas WHERE fecha_corta BETWEEN %s AND %s", (f_ini, f_fin))
+                    t_pendientes = cur.fetchone()[0] or 0.0
 
-                balance_neto = t_ingresos - t_gastos
+                    balance_neto = t_ingresos - t_gastos
 
-                dt_resumen_macro.rows = [
-                    ft.DataRow(cells=[ft.DataCell(ft.Text("(+) Bruto Recaudado")), ft.DataCell(ft.Text(f"Q {t_ingresos:.2f}"))]),
-                    ft.DataRow(cells=[ft.DataCell(ft.Text("(-) Egresos / Retiros")), ft.DataCell(ft.Text(f"Q {t_gastos:.2f}"))]),
-                    ft.DataRow(cells=[ft.DataCell(ft.Text("(=) SALDO NETO")), ft.DataCell(ft.Text(f"Q {balance_neto:.2f}", weight=ft.FontWeight.BOLD))]),
-                    ft.DataRow(cells=[ft.DataCell(ft.Text("(*) Por Cobrar (Fiado)")), ft.DataCell(ft.Text(f"Q {t_pendientes:.2f}"))]),
-                ]
+                    dt_resumen_macro.rows = [
+                        ft.DataRow(cells=[ft.DataCell(ft.Text("(+) Bruto Recaudado")), ft.DataCell(ft.Text(f"Q {t_ingresos:.2f}"))]),
+                        ft.DataRow(cells=[ft.DataCell(ft.Text("(-) Egresos / Retiros")), ft.DataCell(ft.Text(f"Q {t_gastos:.2f}"))]),
+                        ft.DataRow(cells=[ft.DataCell(ft.Text("(=) SALDO NETO")), ft.DataCell(ft.Text(f"Q {balance_neto:.2f}", weight=ft.FontWeight.BOLD))]),
+                        ft.DataRow(cells=[ft.DataCell(ft.Text("(*) Por Cobrar (Fiado)")), ft.DataCell(ft.Text(f"Q {t_pendientes:.2f}"))]),
+                    ]
 
-                db.cursor.execute("""
-                    SELECT DISTINCT fecha_corta FROM ventas WHERE fecha_corta BETWEEN %s AND %s
-                    UNION SELECT fecha_corta FROM gastos WHERE fecha_corta BETWEEN %s AND %s ORDER BY fecha_corta ASC
-                """, (f_ini, f_fin, f_ini, f_fin))
+                    cur.execute("""
+                        SELECT DISTINCT fecha_corta FROM ventas WHERE fecha_corta BETWEEN %s AND %s
+                        UNION SELECT fecha_corta FROM gastos WHERE fecha_corta BETWEEN %s AND %s ORDER BY fecha_corta ASC
+                    """, (f_ini, f_fin, f_ini, f_fin))
 
-                dias = db.cursor.fetchall()
-                dt_cronologico.rows = []
-                for d in dias:
-                    f_dia = d[0]
-                    db.cursor.execute("SELECT SUM(pagado) FROM ventas WHERE fecha_corta=%s", (f_dia,))
-                    ing_d = db.cursor.fetchone()[0] or 0.0
+                    dias = cur.fetchall()
+                    dt_cronologico.rows = []
+                    for d in dias:
+                        f_dia = d[0]
+                        cur.execute("SELECT SUM(pagado) FROM ventas WHERE fecha_corta=%s", (f_dia,))
+                        ing_d = cur.fetchone()[0] or 0.0
 
-                    db.cursor.execute("SELECT 1 FROM cierres WHERE fecha_corta=%s", (f_dia,))
-                    st = "🔒 Cerrado" if db.cursor.fetchone() else "⚠️ ABIERTO"
+                        cur.execute("SELECT 1 FROM cierres WHERE fecha_corta=%s", (f_dia,))
+                        st = "🔒 Cerrado" if cur.fetchone() else "⚠️ ABIERTO"
 
-                    dt_cronologico.rows.append(
-                        ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(f_dia)),
-                            ft.DataCell(ft.Text(f"Q {ing_d:.2f}")),
-                            ft.DataCell(ft.Text(st, color=ft.colors.GREEN_700 if "Cerrado" in st else ft.colors.RED_700)),
-                        ])
-                    )
+                        dt_cronologico.rows.append(
+                            ft.DataRow(cells=[
+                                ft.DataCell(ft.Text(f_dia)),
+                                ft.DataCell(ft.Text(f"Q {ing_d:.2f}")),
+                                ft.DataCell(ft.Text(st, color=ft.colors.GREEN_700 if "Cerrado" in st else ft.colors.RED_700)),
+                            ])
+                        )
 
                 page.update()
             except Exception as ex:
                 mostrar_snack(f"Error procesando: {ex}", es_error=True)
+            finally:
+                db.release_conn(conn)
 
-        # LÓGICA DE EXPORTACIÓN CON DIÁLOGO NATIVO DE WINDOWS
         def exportar_csv_con_ruta(path_destino):
             if not path_destino:
                 return
             f_ini = tf_hist_inicio.value.strip()
             f_fin = tf_hist_fin.value.strip()
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("""
-                    SELECT DISTINCT fecha_corta FROM ventas WHERE fecha_corta BETWEEN %s AND %s
-                    UNION SELECT fecha_corta FROM gastos WHERE fecha_corta BETWEEN %s AND %s ORDER BY fecha_corta ASC
-                """, (f_ini, f_fin, f_ini, f_fin))
-                dias = db.cursor.fetchall()
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT DISTINCT fecha_corta FROM ventas WHERE fecha_corta BETWEEN %s AND %s
+                        UNION SELECT fecha_corta FROM gastos WHERE fecha_corta BETWEEN %s AND %s ORDER BY fecha_corta ASC
+                    """, (f_ini, f_fin, f_ini, f_fin))
+                    dias = cur.fetchall()
 
-                dias_semana_nombres = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-                filas_csv = []
-                
-                filas_csv.append(["--- REPORTE DIARIO DE INGRESOS Y GASTOS ---"])
-                filas_csv.append(["Fecha", "Dia", "Ingreso Recaudado (Q)", "Gastos Retirados (Q)", "Efectivo Esperado en Caja (Q)"])
+                    dias_semana_nombres = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+                    filas_csv = []
+                    
+                    filas_csv.append(["--- REPORTE DIARIO DE INGRESOS Y GASTOS ---"])
+                    filas_csv.append(["Fecha", "Dia", "Ingreso Recaudado (Q)", "Gastos Retirados (Q)", "Efectivo Esperado en Caja (Q)"])
 
-                suma_ingresos_total = 0.0
-                suma_gastos_total = 0.0
-                suma_caja_fisico_total = 0.0
+                    suma_ingresos_total = 0.0
+                    suma_gastos_total = 0.0
+                    suma_caja_fisico_total = 0.0
 
-                for d in dias:
-                    f_dia = d[0]
-                    dt_obj = datetime.datetime.strptime(f_dia, "%Y-%m-%d").date()
-                    nombre_dia = dias_semana_nombres[dt_obj.weekday()]
+                    for d in dias:
+                        f_dia = d[0]
+                        dt_obj = datetime.datetime.strptime(f_dia, "%Y-%m-%d").date()
+                        nombre_dia = dias_semana_nombres[dt_obj.weekday()]
 
-                    db.cursor.execute("SELECT SUM(pagado) FROM ventas WHERE fecha_corta=%s", (f_dia,))
-                    ing_d = db.cursor.fetchone()[0] or 0.0
+                        cur.execute("SELECT SUM(pagado) FROM ventas WHERE fecha_corta=%s", (f_dia,))
+                        ing_d = cur.fetchone()[0] or 0.0
 
-                    db.cursor.execute("SELECT SUM(monto) FROM gastos WHERE fecha_corta=%s", (f_dia,))
-                    gas_d = db.cursor.fetchone()[0] or 0.0
+                        cur.execute("SELECT SUM(monto) FROM gastos WHERE fecha_corta=%s", (f_dia,))
+                        gas_d = cur.fetchone()[0] or 0.0
 
-                    db.cursor.execute("SELECT monto FROM fondo_caja WHERE fecha_corta=%s", (f_dia,))
-                    row_f = db.cursor.fetchone()
-                    fondo_d = row_f[0] if row_f else 0.0
+                        cur.execute("SELECT monto FROM fondo_caja WHERE fecha_corta=%s", (f_dia,))
+                        row_f = cur.fetchone()
+                        fondo_d = row_f[0] if row_f else 0.0
 
-                    efectivo_fisico_dia = fondo_d + ing_d - gas_d
+                        efectivo_fisico_dia = fondo_d + ing_d - gas_d
 
-                    suma_ingresos_total += ing_d
-                    suma_gastos_total += gas_d
-                    suma_caja_fisico_total += efectivo_fisico_dia
+                        suma_ingresos_total += ing_d
+                        suma_gastos_total += gas_d
+                        suma_caja_fisico_total += efectivo_fisico_dia
 
-                    filas_csv.append([f_dia, nombre_dia, f"{ing_d:.2f}", f"{gas_d:.2f}", f"{efectivo_fisico_dia:.2f}"])
+                        filas_csv.append([f_dia, nombre_dia, f"{ing_d:.2f}", f"{gas_d:.2f}", f"{efectivo_fisico_dia:.2f}"])
 
-                filas_csv.append([])
-                filas_csv.append(["SUMA TOTAL INGRESOS", "", f"{suma_ingresos_total:.2f}"])
-                filas_csv.append(["SUMA TOTAL GASTOS", "", f"{suma_gastos_total:.2f}"])
-                filas_csv.append(["TOTAL ACUMULADO ESPERADO EN CAJA FISICA", "", f"{suma_caja_fisico_total:.2f}"])
+                    filas_csv.append([])
+                    filas_csv.append(["SUMA TOTAL INGRESOS", "", f"{suma_ingresos_total:.2f}"])
+                    filas_csv.append(["SUMA TOTAL GASTOS", "", f"{suma_gastos_total:.2f}"])
+                    filas_csv.append(["TOTAL ACUMULADO ESPERADO EN CAJA FISICA", "", f"{suma_caja_fisico_total:.2f}"])
 
-                filas_csv.append([])
-                filas_csv.append(["--- LISTADO DE DEUDAS PENDIENTES ---"])
-                filas_csv.append(["ID Venta", "Fecha", "Cliente", "Detalle", "Debe (Q)"])
+                    filas_csv.append([])
+                    filas_csv.append(["--- LISTADO DE DEUDAS PENDIENTES ---"])
+                    filas_csv.append(["ID Venta", "Fecha", "Cliente", "Detalle", "Debe (Q)"])
 
-                db.cursor.execute("""
-                    SELECT v.id, v.fecha_corta, c.nombre, v.producto, v.pendiente 
-                    FROM ventas v JOIN clientes c ON v.cliente_id = c.id WHERE v.pendiente > 0 ORDER BY v.id DESC
-                """)
-                deudas = db.cursor.fetchall()
-                suma_deudas_total = 0.0
+                    cur.execute("""
+                        SELECT v.id, v.fecha_corta, c.nombre, v.producto, v.pendiente 
+                        FROM ventas v JOIN clientes c ON v.cliente_id = c.id WHERE v.pendiente > 0 ORDER BY v.id DESC
+                    """)
+                    deudas = cur.fetchall()
+                    suma_deudas_total = 0.0
 
-                for deb in deudas:
-                    v_id, fecha_v, cli_v, prod_v, pend_v = deb
-                    suma_deudas_total += pend_v
-                    filas_csv.append([str(v_id), fecha_v, cli_v, prod_v, f"{pend_v:.2f}"])
+                    for deb in deudas:
+                        v_id, fecha_v, cli_v, prod_v, pend_v = deb
+                        suma_deudas_total += pend_v
+                        filas_csv.append([str(v_id), fecha_v, cli_v, prod_v, f"{pend_v:.2f}"])
 
-                filas_csv.append([])
-                filas_csv.append(["SUMA TOTAL DE DEUDAS PENDIENTES", "", "", "", f"{suma_deudas_total:.2f}"])
+                    filas_csv.append([])
+                    filas_csv.append(["SUMA TOTAL DE DEUDAS PENDIENTES", "", "", "", f"{suma_deudas_total:.2f}"])
 
                 with open(path_destino, mode="w", newline="", encoding="utf-8-sig") as archivo_salida:
                     writer = csv.writer(archivo_salida)
@@ -718,6 +785,8 @@ def main(page: ft.Page):
                 mostrar_snack(f"📥 Archivo guardado correctamente en: {path_destino}")
             except Exception as ex:
                 mostrar_snack(f"Error al exportar archivo: {ex}", es_error=True)
+            finally:
+                db.release_conn(conn)
 
         def al_seleccionar_guardar(e: ft.FilePickerResultEvent):
             if e.path:
@@ -782,45 +851,48 @@ def main(page: ft.Page):
                 fecha_str = estado["fecha"].strftime("%Y-%m-%d")
                 fecha_iso = datetime.datetime.now().isoformat()
 
+                conn = db.get_conn()
                 try:
-                    db.asegurar_conexion()
-                    if es_por_cliente:
-                        c_id = v_id_o_cid
-                        db.cursor.execute("SELECT id, pendiente FROM ventas WHERE cliente_id=%s AND pendiente > 0 ORDER BY id ASC", (c_id,))
-                        deudas_viejas = db.cursor.fetchall()
-                        por_abonar = abono
-                        for v_id, v_pend in deudas_viejas:
-                            if por_abonar <= 0: break
-                            v_pend = float(v_pend)
-                            if por_abonar >= v_pend:
-                                db.cursor.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = 0 WHERE id = %s", (v_pend, v_id))
-                                por_abonar -= v_pend
-                            else:
-                                db.cursor.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = pendiente - %s WHERE id = %s", (por_abonar, por_abonar, v_id))
-                                por_abonar = 0
+                    with conn.cursor() as cur:
+                        if es_por_cliente:
+                            c_id = v_id_o_cid
+                            cur.execute("SELECT id, pendiente FROM ventas WHERE cliente_id=%s AND pendiente > 0 ORDER BY id ASC", (c_id,))
+                            deudas_viejas = cur.fetchall()
+                            por_abonar = abono
+                            for v_id, v_pend in deudas_viejas:
+                                if por_abonar <= 0: break
+                                v_pend = float(v_pend)
+                                if por_abonar >= v_pend:
+                                    cur.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = 0 WHERE id = %s", (v_pend, v_id))
+                                    por_abonar -= v_pend
+                                else:
+                                    cur.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = pendiente - %s WHERE id = %s", (por_abonar, por_abonar, v_id))
+                                    por_abonar = 0
 
-                        db.cursor.execute("""
-                            INSERT INTO ventas (cliente_id, producto, total, pagado, pendiente, fecha_corta, fecha_iso)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        """, (c_id, f"Abono a deudas de {cliente_nombre}", 0.0, abono, 0.0, fecha_str, fecha_iso))
-                    else:
-                        v_id = v_id_o_cid
-                        db.cursor.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = pendiente - %s WHERE id = %s", (abono, abono, v_id))
-                        db.cursor.execute("SELECT cliente_id, producto FROM ventas WHERE id=%s", (v_id,))
-                        c_id, prod_original = db.cursor.fetchone()
+                            cur.execute("""
+                                INSERT INTO ventas (cliente_id, producto, total, pagado, pendiente, fecha_corta, fecha_iso)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            """, (c_id, f"Abono a deudas de {cliente_nombre}", 0.0, abono, 0.0, fecha_str, fecha_iso))
+                        else:
+                            v_id = v_id_o_cid
+                            cur.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = pendiente - %s WHERE id = %s", (abono, abono, v_id))
+                            cur.execute("SELECT cliente_id, producto FROM ventas WHERE id=%s", (v_id,))
+                            c_id, prod_original = cur.fetchone()
 
-                        db.cursor.execute("""
-                            INSERT INTO ventas (cliente_id, producto, total, pagado, pendiente, fecha_corta, fecha_iso)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        """, (c_id, f"Abono a: {prod_original}", 0.0, abono, 0.0, fecha_str, fecha_iso))
+                            cur.execute("""
+                                INSERT INTO ventas (cliente_id, producto, total, pagado, pendiente, fecha_corta, fecha_iso)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            """, (c_id, f"Abono a: {prod_original}", 0.0, abono, 0.0, fecha_str, fecha_iso))
 
-                    db.conn.commit()
+                        conn.commit()
                     cerrar_dialogo_seguro(dialog_abono)
                     mostrar_snack(f"Abono de Q {abono:.2f} registrado.")
                     refrescar_pantallas()
                 except Exception as ex:
-                    db.conn.rollback()
+                    conn.rollback()
                     mostrar_snack(f"Error en abono: {ex}", es_error=True)
+                finally:
+                    db.release_conn(conn)
 
             lbl_abono_info.value = f"Cliente: {cliente_nombre}\nDeuda Total: Q {pendiente_actual:.2f}"
             dialog_abono.actions = [
@@ -875,26 +947,30 @@ def main(page: ft.Page):
             tf_car_pago.value = str(c_price)
             tf_car_abono_v.value = "0.00"
 
-            db.asegurar_conexion()
-            db.cursor.execute("SELECT SUM(pendiente) FROM ventas WHERE cliente_id=%s", (c_id,))
-            res_deuda = db.cursor.fetchone()
-            deuda_total = float(res_deuda[0]) if res_deuda and res_deuda[0] else 0.0
+            conn = db.get_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT SUM(pendiente) FROM ventas WHERE cliente_id=%s", (c_id,))
+                    res_deuda = cur.fetchone()
+                    deuda_total = float(res_deuda[0]) if res_deuda and res_deuda[0] else 0.0
 
-            if deuda_total > 0:
-                estado["tiene_deuda_previa"] = True
-                lbl_car_alerta.value = f"⚠️ Deuda anterior pendiente: Q {deuda_total:.2f}"
-                lbl_car_alerta.visible = True
-                tf_car_abono_v.visible = True
-                tf_car_abono_v.disabled = False
-            else:
-                estado["tiene_deuda_previa"] = False
-                lbl_car_alerta.visible = False
-                tf_car_abono_v.visible = False
+                if deuda_total > 0:
+                    estado["tiene_deuda_previa"] = True
+                    lbl_car_alerta.value = f"⚠️ Deuda anterior pendiente: Q {deuda_total:.2f}"
+                    lbl_car_alerta.visible = True
+                    tf_car_abono_v.visible = True
+                    tf_car_abono_v.disabled = False
+                else:
+                    estado["tiene_deuda_previa"] = False
+                    lbl_car_alerta.visible = False
+                    tf_car_abono_v.visible = False
 
-            col_preg_carrusel.visible = True
-            col_form_carrusel.visible = False
-            actualizar_botones_carrusel()
-            page.update()
+                col_preg_carrusel.visible = True
+                col_form_carrusel.visible = False
+                actualizar_botones_carrusel()
+                page.update()
+            finally:
+                db.release_conn(conn)
 
         def mostrar_formulario_carrusel():
             col_preg_carrusel.visible = False
@@ -905,17 +981,20 @@ def main(page: ft.Page):
         def carrusel_marcar_inactivo():
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
             cli = estado["carrusel_list"][estado["carrusel_idx"]]
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("INSERT INTO blacklist (cliente_id, fecha_corta, motivo) VALUES (%s, %s, %s)", (cli[0], fecha_str, "Ausente"))
-                db.conn.commit()
+                with conn.cursor() as cur:
+                    cur.execute("INSERT INTO blacklist (cliente_id, fecha_corta, motivo) VALUES (%s, %s, %s)", (cli[0], fecha_str, "Ausente"))
+                    conn.commit()
                 estado["carrusel_list"].pop(estado["carrusel_idx"])
                 if estado["carrusel_idx"] >= len(estado["carrusel_list"]):
                     estado["carrusel_idx"] = max(0, len(estado["carrusel_list"]) - 1)
                 cargar_cliente_carrusel()
             except Exception as ex:
-                db.conn.rollback()
+                conn.rollback()
                 mostrar_snack(f"Error: {ex}", es_error=True)
+            finally:
+                db.release_conn(conn)
 
         def registrar_operacion_carrusel():
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
@@ -937,40 +1016,43 @@ def main(page: ft.Page):
 
             pendiente_hoy = max(0.0, tot - pag)
 
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("""
-                    INSERT INTO ventas (cliente_id, producto, total, pagado, pendiente, fecha_corta, fecha_iso)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (c_id, desc, tot, pag, pendiente_hoy, fecha_str, fecha_iso))
-
-                if abono_v > 0:
-                    db.cursor.execute("SELECT id, pendiente FROM ventas WHERE cliente_id=%s AND pendiente > 0 ORDER BY id ASC", (c_id,))
-                    deudas_viejas = db.cursor.fetchall()
-                    por_abonar = abono_v
-                    for v_id, v_pend in deudas_viejas:
-                        if por_abonar <= 0: break
-                        v_pend = float(v_pend)
-                        if por_abonar >= v_pend:
-                            db.cursor.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = 0 WHERE id = %s", (v_pend, v_id))
-                            por_abonar -= v_pend
-                        else:
-                            db.cursor.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = pendiente - %s WHERE id = %s", (por_abonar, por_abonar, v_id))
-                            por_abonar = 0
-
-                    db.cursor.execute("""
+                with conn.cursor() as cur:
+                    cur.execute("""
                         INSERT INTO ventas (cliente_id, producto, total, pagado, pendiente, fecha_corta, fecha_iso)
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """, (c_id, f"Abono a deudas de {cli[1]}", 0.0, abono_v, 0.0, fecha_str, fecha_iso))
+                    """, (c_id, desc, tot, pag, pendiente_hoy, fecha_str, fecha_iso))
 
-                db.conn.commit()
+                    if abono_v > 0:
+                        cur.execute("SELECT id, pendiente FROM ventas WHERE cliente_id=%s AND pendiente > 0 ORDER BY id ASC", (c_id,))
+                        deudas_viejas = cur.fetchall()
+                        por_abonar = abono_v
+                        for v_id, v_pend in deudas_viejas:
+                            if por_abonar <= 0: break
+                            v_pend = float(v_pend)
+                            if por_abonar >= v_pend:
+                                cur.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = 0 WHERE id = %s", (v_pend, v_id))
+                                por_abonar -= v_pend
+                            else:
+                                cur.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = pendiente - %s WHERE id = %s", (por_abonar, por_abonar, v_id))
+                                por_abonar = 0
+
+                        cur.execute("""
+                            INSERT INTO ventas (cliente_id, producto, total, pagado, pendiente, fecha_corta, fecha_iso)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """, (c_id, f"Abono a deudas de {cli[1]}", 0.0, abono_v, 0.0, fecha_str, fecha_iso))
+
+                    conn.commit()
                 estado["carrusel_list"].pop(estado["carrusel_idx"])
                 if estado["carrusel_idx"] >= len(estado["carrusel_list"]):
                     estado["carrusel_idx"] = max(0, len(estado["carrusel_list"]) - 1)
                 cargar_cliente_carrusel()
             except Exception as ex:
-                db.conn.rollback()
+                conn.rollback()
                 mostrar_snack(f"Error al guardar: {ex}", es_error=True)
+            finally:
+                db.release_conn(conn)
 
         def nav_carrusel(delta):
             nuevo_idx = estado["carrusel_idx"] + delta
@@ -1003,15 +1085,16 @@ def main(page: ft.Page):
 
             cerrar_dialogo_seguro(dialog_carrusel)
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("""
-                    SELECT id, nombre, servicio, precio, notas FROM clientes 
-                    WHERE id NOT IN (SELECT cliente_id FROM ventas WHERE fecha_corta=%s)
-                    AND id NOT IN (SELECT cliente_id FROM blacklist WHERE fecha_corta=%s)
-                    ORDER BY nombre ASC
-                """, (fecha_str, fecha_str))
-                estado["carrusel_list"] = db.cursor.fetchall()
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT id, nombre, servicio, precio, notas FROM clientes 
+                        WHERE id NOT IN (SELECT cliente_id FROM ventas WHERE fecha_corta=%s)
+                        AND id NOT IN (SELECT cliente_id FROM blacklist WHERE fecha_corta=%s)
+                        ORDER BY nombre ASC
+                    """, (fecha_str, fecha_str))
+                    estado["carrusel_list"] = cur.fetchall()
 
                 if not estado["carrusel_list"]:
                     mostrar_snack("🎉 ¡Todos los clientes ya fueron procesados!")
@@ -1024,6 +1107,8 @@ def main(page: ft.Page):
                 cargar_cliente_carrusel()
             except Exception as ex:
                 mostrar_snack(f"Error en carrusel: {ex}", es_error=True)
+            finally:
+                db.release_conn(conn)
 
         def cargar_tabla_activos_inactivos():
             dt_activos.rows.clear()
@@ -1031,167 +1116,185 @@ def main(page: ft.Page):
             dt_inactivos.rows.clear()
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
 
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("""
-                    SELECT v.id, c.nombre, v.producto, v.total, v.pagado, v.pendiente 
-                    FROM ventas v JOIN clientes c ON v.cliente_id = c.id WHERE v.fecha_corta=%s
-                """, (fecha_str,))
-                for r in db.cursor.fetchall():
-                    v_id, c_nombre, prod, total, pag, pend = r
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT v.id, c.nombre, v.producto, v.total, v.pagado, v.pendiente 
+                        FROM ventas v JOIN clientes c ON v.cliente_id = c.id WHERE v.fecha_corta=%s
+                    """, (fecha_str,))
+                    for r in cur.fetchall():
+                        v_id, c_nombre, prod, total, pag, pend = r
 
-                    def editar_venta_fn(e, vid=v_id, name=c_nombre, p=prod, tot=total, pg=pag):
-                        abrir_modal_editar_venta(vid, name, p, tot, pg)
+                        def editar_venta_fn(e, vid=v_id, name=c_nombre, p=prod, tot=total, pg=pag):
+                            abrir_modal_editar_venta(vid, name, p, tot, pg)
 
-                    def borrar_venta_fn(e, vid=v_id, name=c_nombre):
-                        if es_dia_congelado():
-                            mostrar_snack("Caja congelada hoy.", es_error=True)
-                            return
-                        try:
-                            db.asegurar_conexion()
-                            db.cursor.execute("DELETE FROM ventas WHERE id=%s", (vid,))
-                            db.conn.commit()
-                            mostrar_snack(f"Registro de '{name}' eliminado.")
-                            refrescar_pantallas()
-                        except Exception as ex:
-                            db.conn.rollback()
-                            mostrar_snack(f"Error: {ex}", es_error=True)
+                        def borrar_venta_fn(e, vid=v_id, name=c_nombre):
+                            if es_dia_congelado():
+                                mostrar_snack("Caja congelada hoy.", es_error=True)
+                                return
+                            
+                            def ejecutar_borrado():
+                                c_borra = db.get_conn()
+                                try:
+                                    with c_borra.cursor() as cur_b:
+                                        cur_b.execute("DELETE FROM ventas WHERE id=%s", (vid,))
+                                        c_borra.commit()
+                                    mostrar_snack(f"Registro de '{name}' eliminado.")
+                                    refrescar_pantallas()
+                                except Exception as ex:
+                                    c_borra.rollback()
+                                    mostrar_snack(f"Error: {ex}", es_error=True)
+                                finally:
+                                    db.release_conn(c_borra)
 
-                    if page.width <= 700:
-                        texto_pago_deuda = f"Efectivo: Q {pag:.2f}"
-                        if pend > 0:
-                            texto_pago_deuda += f" (Debe: Q {pend:.2f})"
+                            pedir_confirmacion_eliminacion(f"¿Deseas borrar el cobro de {name} ({prod})?", ejecutar_borrado)
 
-                        card_item = ft.Container(
-                            content=ft.Column([
-                                ft.Row([
-                                    ft.Text(f"{c_nombre}", weight=ft.FontWeight.BOLD, size=13, color=C_TEXTO_NEGRO),
-                                    ft.Text(f"Total: Q {total:.2f}", weight=ft.FontWeight.BOLD, size=12, color=C_CELESTE_PRINCIPAL)
-                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                ft.Row([
-                                    ft.Text(f"Detalle: {prod}", size=11, color=ft.colors.GREY_700),
-                                    ft.Text(texto_pago_deuda, size=11, color=ft.colors.RED_700 if pend > 0 else ft.colors.GREEN_800, weight=ft.FontWeight.BOLD)
-                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                                ft.Row([
-                                    ft.IconButton(icon=ft.icons.EDIT, icon_size=16, icon_color=C_CELESTE_PRINCIPAL, on_click=editar_venta_fn, tooltip="Editar"),
-                                    ft.IconButton(icon=ft.icons.DELETE, icon_size=16, icon_color=ft.colors.RED_600, on_click=borrar_venta_fn, tooltip="Eliminar"),
-                                ], alignment=ft.MainAxisAlignment.END, spacing=0)
-                            ], spacing=2),
-                            padding=6,
-                            margin=ft.margin.symmetric(vertical=2),
-                            border=ft.border.all(1, C_GRIS_BORDE),
-                            border_radius=6,
-                            bgcolor=C_BLANCO
-                        )
-                        lista_activos_movil.controls.append(card_item)
-                    else:
-                        dt_activos.rows.append(
+                        if page.width <= 700:
+                            texto_pago_deuda = f"Efectivo: Q {pag:.2f}"
+                            if pend > 0:
+                                texto_pago_deuda += f" (Debe: Q {pend:.2f})"
+
+                            card_item = ft.Container(
+                                content=ft.Column([
+                                    ft.Row([
+                                        ft.Text(f"{c_nombre}", weight=ft.FontWeight.BOLD, size=13, color=C_TEXTO_NEGRO),
+                                        ft.Text(f"Total: Q {total:.2f}", weight=ft.FontWeight.BOLD, size=12, color=C_CELESTE_PRINCIPAL)
+                                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                    ft.Row([
+                                        ft.Text(f"Detalle: {prod}", size=11, color=ft.colors.GREY_700),
+                                        ft.Text(texto_pago_deuda, size=11, color=ft.colors.RED_700 if pend > 0 else ft.colors.GREEN_800, weight=ft.FontWeight.BOLD)
+                                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                    ft.Row([
+                                        ft.IconButton(icon=ft.icons.EDIT, icon_size=16, icon_color=C_CELESTE_PRINCIPAL, on_click=editar_venta_fn, tooltip="Editar"),
+                                        ft.IconButton(icon=ft.icons.DELETE, icon_size=16, icon_color=ft.colors.RED_600, on_click=borrar_venta_fn, tooltip="Eliminar"),
+                                    ], alignment=ft.MainAxisAlignment.END, spacing=0)
+                                ], spacing=2),
+                                padding=6,
+                                margin=ft.margin.symmetric(vertical=2),
+                                border=ft.border.all(1, C_GRIS_BORDE),
+                                border_radius=6,
+                                bgcolor=C_BLANCO
+                            )
+                            lista_activos_movil.controls.append(card_item)
+                        else:
+                            dt_activos.rows.append(
+                                ft.DataRow(cells=[
+                                    ft.DataCell(ft.Text(c_nombre, color=C_TEXTO_NEGRO)),
+                                    ft.DataCell(ft.Text(prod, color=C_TEXTO_NEGRO)),
+                                    ft.DataCell(ft.Text(f"Q {total:.2f}", color=C_TEXTO_NEGRO)),
+                                    ft.DataCell(ft.Text(f"Q {pag:.2f}", color=C_TEXTO_NEGRO)),
+                                    ft.DataCell(ft.Text(f"Q {pend:.2f}", color=ft.colors.RED_700 if pend > 0 else C_TEXTO_NEGRO)),
+                                    ft.DataCell(ft.Row([
+                                        ft.IconButton(icon=ft.icons.EDIT, icon_size=16, icon_color=C_CELESTE_PRINCIPAL, on_click=editar_venta_fn, tooltip="Editar"),
+                                        ft.IconButton(icon=ft.icons.DELETE, icon_size=16, icon_color=ft.colors.RED_600, on_click=borrar_venta_fn, tooltip="Eliminar"),
+                                    ], spacing=0))
+                                ])
+                            )
+
+                    cur.execute("""
+                        SELECT b.id, c.nombre, b.motivo FROM blacklist b 
+                        JOIN clientes c ON b.cliente_id = c.id WHERE b.fecha_corta=%s
+                    """, (fecha_str,))
+                    for r in cur.fetchall():
+                        b_id, c_nombre, motivo = r
+
+                        def restaurar_inactivo_fn(e, bid=b_id, name=c_nombre):
+                            if es_dia_congelado():
+                                mostrar_snack("Caja congelada.", es_error=True)
+                                return
+                            c_rest = db.get_conn()
+                            try:
+                                with c_rest.cursor() as cur_r:
+                                    cur_r.execute("DELETE FROM blacklist WHERE id=%s", (bid,))
+                                    c_rest.commit()
+                                mostrar_snack(f"'{name}' restaurado.")
+                                refrescar_pantallas()
+                            except Exception as ex:
+                                c_rest.rollback()
+                                mostrar_snack(f"Error: {ex}", es_error=True)
+                            finally:
+                                db.release_conn(c_rest)
+
+                        dt_inactivos.rows.append(
                             ft.DataRow(cells=[
+                                ft.DataCell(ft.Text(str(b_id), color=C_TEXTO_NEGRO)),
                                 ft.DataCell(ft.Text(c_nombre, color=C_TEXTO_NEGRO)),
-                                ft.DataCell(ft.Text(prod, color=C_TEXTO_NEGRO)),
-                                ft.DataCell(ft.Text(f"Q {total:.2f}", color=C_TEXTO_NEGRO)),
-                                ft.DataCell(ft.Text(f"Q {pag:.2f}", color=C_TEXTO_NEGRO)),
-                                ft.DataCell(ft.Text(f"Q {pend:.2f}", color=ft.colors.RED_700 if pend > 0 else C_TEXTO_NEGRO)),
-                                ft.DataCell(ft.Row([
-                                    ft.IconButton(icon=ft.icons.EDIT, icon_size=16, icon_color=C_CELESTE_PRINCIPAL, on_click=editar_venta_fn, tooltip="Editar"),
-                                    ft.IconButton(icon=ft.icons.DELETE, icon_size=16, icon_color=ft.colors.RED_600, on_click=borrar_venta_fn, tooltip="Eliminar"),
-                                ], spacing=0))
+                                ft.DataCell(ft.Text(motivo, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.ElevatedButton("↺", on_click=restaurar_inactivo_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)),
                             ])
                         )
-
-                db.cursor.execute("""
-                    SELECT b.id, c.nombre, b.motivo FROM blacklist b 
-                    JOIN clientes c ON b.cliente_id = c.id WHERE b.fecha_corta=%s
-                """, (fecha_str,))
-                for r in db.cursor.fetchall():
-                    b_id, c_nombre, motivo = r
-
-                    def restaurar_inactivo_fn(e, bid=b_id, name=c_nombre):
-                        if es_dia_congelado():
-                            mostrar_snack("Caja congelada.", es_error=True)
-                            return
-                        try:
-                            db.asegurar_conexion()
-                            db.cursor.execute("DELETE FROM blacklist WHERE id=%s", (bid,))
-                            db.conn.commit()
-                            mostrar_snack(f"'{name}' restaurado.")
-                            refrescar_pantallas()
-                        except Exception as ex:
-                            db.conn.rollback()
-                            mostrar_snack(f"Error: {ex}", es_error=True)
-
-                    dt_inactivos.rows.append(
-                        ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(str(b_id), color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(c_nombre, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(motivo, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.ElevatedButton("↺", on_click=restaurar_inactivo_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)),
-                        ])
-                    )
             except Exception as ex:
                 print(f"Error cargando día: {ex}")
+            finally:
+                db.release_conn(conn)
 
         def cargar_datos_caja():
             dt_abonos_hoy.rows = []
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
 
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("SELECT monto FROM fondo_caja WHERE fecha_corta=%s", (fecha_str,))
-                row_f = db.cursor.fetchone()
-                fondo_monto = row_f[0] if row_f else 0.0
-                tf_fondo_base.value = str(fondo_monto)
-                lbl_arqueo_fondo.value = f"Fondo Inicial: Q {fondo_monto:.2f}"
+                with conn.cursor() as cur:
+                    cur.execute("SELECT monto FROM fondo_caja WHERE fecha_corta=%s", (fecha_str,))
+                    row_f = cur.fetchone()
+                    fondo_monto = row_f[0] if row_f else 0.0
+                    tf_fondo_base.value = str(fondo_monto)
+                    lbl_arqueo_fondo.value = f"Fondo Inicial: Q {fondo_monto:.2f}"
 
-                db.cursor.execute("SELECT SUM(pagado) FROM ventas WHERE fecha_corta=%s AND producto NOT LIKE 'Abono%%'", (fecha_str,))
-                v_sum = db.cursor.fetchone()[0] or 0.0
-                lbl_arqueo_ventas.value = f"Ventas Directas: Q {v_sum:.2f}"
+                    cur.execute("SELECT SUM(pagado) FROM ventas WHERE fecha_corta=%s AND producto NOT LIKE 'Abono%%'", (fecha_str,))
+                    v_sum = cur.fetchone()[0] or 0.0
+                    lbl_arqueo_ventas.value = f"Ventas Directas: Q {v_sum:.2f}"
 
-                db.cursor.execute("""
-                    SELECT c.nombre, v.producto, v.pagado FROM ventas v 
-                    JOIN clientes c ON v.cliente_id = c.id 
-                    WHERE v.fecha_corta=%s AND v.producto LIKE 'Abono%%'
-                """, (fecha_str,))
-                abonos_filas = db.cursor.fetchall()
-                abonos_sum = 0.0
+                    cur.execute("""
+                        SELECT c.nombre, v.producto, v.pagado FROM ventas v 
+                        JOIN clientes c ON v.cliente_id = c.id 
+                        WHERE v.fecha_corta=%s AND v.producto LIKE 'Abono%%'
+                    """, (fecha_str,))
+                    abonos_filas = cur.fetchall()
+                    abonos_sum = 0.0
 
-                for ab in abonos_filas:
-                    abonos_sum += ab[2]
-                    dt_abonos_hoy.rows.append(
-                        ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(ab[0], color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(ab[1], color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {ab[2]:.2f}", color=C_CELESTE_PRINCIPAL, weight=ft.FontWeight.BOLD)),
-                        ])
-                    )
-                lbl_arqueo_abonos.value = f"Abonos Cobrados: Q {abonos_sum:.2f}"
+                    for ab in abonos_filas:
+                        abonos_sum += ab[2]
+                        dt_abonos_hoy.rows.append(
+                            ft.DataRow(cells=[
+                                ft.DataCell(ft.Text(ab[0], color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(ab[1], color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {ab[2]:.2f}", color=C_CELESTE_PRINCIPAL, weight=ft.FontWeight.BOLD)),
+                            ])
+                        )
+                    lbl_arqueo_abonos.value = f"Abonos Cobrados: Q {abonos_sum:.2f}"
 
-                db.cursor.execute("SELECT SUM(monto) FROM gastos WHERE fecha_corta=%s", (fecha_str,))
-                g_sum = db.cursor.fetchone()[0] or 0.0
-                lbl_arqueo_gastos.value = f"Retiros/Gastos: - Q {g_sum:.2f}"
+                    cur.execute("SELECT SUM(monto) FROM gastos WHERE fecha_corta=%s", (fecha_str,))
+                    g_sum = cur.fetchone()[0] or 0.0
+                    lbl_arqueo_gastos.value = f"Retiros/Gastos: - Q {g_sum:.2f}"
 
-                total_esperado = fondo_monto + v_sum + abonos_sum - g_sum
-                lbl_arqueo_total_fisico.value = f"TOTAL ESPERADO: Q {total_esperado:.2f}"
-                lbl_caja_total.value = f"Caja: Q {(v_sum + abonos_sum - g_sum):.2f}"
+                    total_esperado = fondo_monto + v_sum + abonos_sum - g_sum
+                    lbl_arqueo_total_fisico.value = f"TOTAL ESPERADO: Q {total_esperado:.2f}"
+                    lbl_caja_total.value = f"Caja: Q {(v_sum + abonos_sum - g_sum):.2f}"
             except Exception as ex:
                 print(f"Error caja: {ex}")
+            finally:
+                db.release_conn(conn)
 
         def cargar_tabla_clientes():
             dt_clientes.rows.clear()
             lista_clientes_movil.controls.clear()
             busqueda = f"%{tf_cli_buscar.value.strip()}%" if tf_cli_buscar.value else "%"
+            
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("""
-                    SELECT c.id, c.nombre, c.servicio, c.precio, c.notas,
-                           COALESCE(SUM(v.pendiente), 0) as deuda_total
-                    FROM clientes c
-                    LEFT JOIN ventas v ON c.id = v.cliente_id
-                    WHERE c.nombre ILIKE %s
-                    GROUP BY c.id, c.nombre, c.servicio, c.precio, c.notas
-                    ORDER BY c.nombre ASC
-                """, (busqueda,))
-                filas_db = db.cursor.fetchall()
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT c.id, c.nombre, c.servicio, c.precio, c.notas,
+                               COALESCE(SUM(v.pendiente), 0) as deuda_total
+                        FROM clientes c
+                        LEFT JOIN ventas v ON c.id = v.cliente_id
+                        WHERE c.nombre ILIKE %s
+                        GROUP BY c.id, c.nombre, c.servicio, c.precio, c.notas
+                        ORDER BY c.nombre ASC
+                    """, (busqueda,))
+                    filas_db = cur.fetchall()
                 
                 nuevas_filas = []
                 for r in filas_db:
@@ -1201,15 +1304,21 @@ def main(page: ft.Page):
                         abrir_modal_cliente(cid, n, s, p, nt)
 
                     def borrar_fn(e, cid=c_id, n=nombre):
-                        try:
-                            db.asegurar_conexion()
-                            db.cursor.execute("DELETE FROM clientes WHERE id=%s", (cid,))
-                            db.conn.commit()
-                            cargar_tabla_clientes()
-                            mostrar_snack(f"Cliente '{n}' eliminado.")
-                        except Exception as ex:
-                            db.conn.rollback()
-                            mostrar_snack(f"Error: {ex}", es_error=True)
+                        def ejecutar_borrado_cli():
+                            c_del = db.get_conn()
+                            try:
+                                with c_del.cursor() as cur_d:
+                                    cur_d.execute("DELETE FROM clientes WHERE id=%s", (cid,))
+                                    c_del.commit()
+                                cargar_tabla_clientes()
+                                mostrar_snack(f"Cliente '{n}' eliminado.")
+                            except Exception as ex:
+                                c_del.rollback()
+                                mostrar_snack(f"Error: {ex}", es_error=True)
+                            finally:
+                                db.release_conn(c_del)
+
+                        pedir_confirmacion_eliminacion(f"¿Eliminar a {n}? Se borrarán también sus ventas registradas.", ejecutar_borrado_cli)
 
                     def ver_hist_fn(e, cid=c_id, n=nombre, nt=notas):
                         ver_historial_cliente(cid, n, nt)
@@ -1264,57 +1373,74 @@ def main(page: ft.Page):
                 page.update()
             except Exception as ex:
                 print(f"Error clientes: {ex}")
+            finally:
+                db.release_conn(conn)
 
         def cargar_tabla_gastos():
             dt_gastos.rows = []
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("SELECT id, descripcion, monto FROM gastos WHERE fecha_corta=%s", (fecha_str,))
-                for r in db.cursor.fetchall():
-                    g_id, desc, monto = r
+                with conn.cursor() as cur:
+                    cur.execute("SELECT id, descripcion, monto FROM gastos WHERE fecha_corta=%s", (fecha_str,))
+                    for r in cur.fetchall():
+                        g_id, desc, monto = r
 
-                    def eliminar_gasto_fn(e, gid=g_id):
-                        if es_dia_congelado():
-                            mostrar_snack("Caja congelada.", es_error=True)
-                            return
-                        try:
-                            db.asegurar_conexion()
-                            db.cursor.execute("DELETE FROM gastos WHERE id=%s", (gid,))
-                            db.conn.commit()
-                            refrescar_pantallas()
-                            mostrar_snack("Gasto eliminado.")
-                        except Exception as ex:
-                            db.conn.rollback()
-                            mostrar_snack(f"Error: {ex}", es_error=True)
+                        def eliminar_gasto_fn(e, gid=g_id):
+                            if es_dia_congelado():
+                                mostrar_snack("Caja congelada.", es_error=True)
+                                return
+                            
+                            def ejecutar_borrado_gasto():
+                                c_gas = db.get_conn()
+                                try:
+                                    with c_gas.cursor() as cur_g:
+                                        cur_g.execute("DELETE FROM gastos WHERE id=%s", (gid,))
+                                        c_gas.commit()
+                                    refrescar_pantallas()
+                                    mostrar_snack("Gasto eliminado.")
+                                except Exception as ex:
+                                    c_gas.rollback()
+                                    mostrar_snack(f"Error: {ex}", es_error=True)
+                                finally:
+                                    db.release_conn(c_gas)
 
-                    dt_gastos.rows.append(
-                        ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(str(g_id), color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(desc, color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.Text(f"Q {monto:.2f}", color=C_TEXTO_NEGRO)),
-                            ft.DataCell(ft.IconButton(icon=ft.icons.DELETE, icon_color=ft.colors.RED_600, on_click=eliminar_gasto_fn, tooltip="Borrar")),
-                        ])
-                    )
+                            pedir_confirmacion_eliminacion(f"¿Eliminar gasto de Q {monto:.2f} ({desc})?", ejecutar_borrado_gasto)
+
+                        dt_gastos.rows.append(
+                            ft.DataRow(cells=[
+                                ft.DataCell(ft.Text(str(g_id), color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(desc, color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {monto:.2f}", color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.IconButton(icon=ft.icons.DELETE, icon_color=ft.colors.RED_600, on_click=eliminar_gasto_fn, tooltip="Borrar")),
+                            ])
+                        )
             except Exception as ex:
                 print(f"Error gastos: {ex}")
+            finally:
+                db.release_conn(conn)
 
         def cargar_tabla_deudas():
             dt_deudas.rows.clear()
             lista_deudas_movil.controls.clear()
+            busqueda = f"%{tf_deudas_buscar.value.strip()}%" if tf_deudas_buscar.value else "%"
             
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("""
-                    SELECT v.id, v.fecha_corta, c.nombre, v.producto, v.total, v.pagado, v.pendiente 
-                    FROM ventas v JOIN clientes c ON v.cliente_id = c.id WHERE v.pendiente > 0 ORDER BY v.id DESC
-                """)
-                deudas = db.cursor.fetchall()
-                suma_global = 0.0
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT v.id, v.fecha_corta, c.nombre, v.producto, v.total, v.pagado, v.pendiente 
+                        FROM ventas v JOIN clientes c ON v.cliente_id = c.id 
+                        WHERE v.pendiente > 0 AND c.nombre ILIKE %s ORDER BY v.id DESC
+                    """, (busqueda,))
+                    deudas = cur.fetchall()
+                    
+                    cur.execute("SELECT SUM(pendiente) FROM ventas WHERE pendiente > 0")
+                    row_tot = cur.fetchone()
+                    suma_global = row_tot[0] or 0.0
 
                 for r in deudas:
                     v_id, fecha, cliente, producto, total, pagado, pendiente = r
-                    suma_global += pendiente
 
                     def abono_fn(e, vid=v_id, cname=cliente, pend=pendiente):
                         abrir_dialogo_abono(vid, cname, pend)
@@ -1374,29 +1500,29 @@ def main(page: ft.Page):
                     padding=12, border=ft.border.all(1, C_GRIS_BORDE), border_radius=8, bgcolor=C_BLANCO
                 )
                 page.update()
+            finally:
+                db.release_conn(conn)
 
         def verificar_cierres_olvidados():
             hoy = datetime.date.today()
             limite_antiguedad = hoy - datetime.timedelta(days=5)
             hoy_str = hoy.strftime("%Y-%m-%d")
             limite_str = limite_antiguedad.strftime("%Y-%m-%d")
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("""
-                    SELECT DISTINCT fecha_corta FROM ventas WHERE fecha_corta >= %s AND fecha_corta < %s AND fecha_corta NOT IN (SELECT fecha_corta FROM cierres)
-                    UNION SELECT DISTINCT fecha_corta FROM gastos WHERE fecha_corta >= %s AND fecha_corta < %s AND fecha_corta NOT IN (SELECT fecha_corta FROM cierres)
-                """, (limite_str, hoy_str, limite_str, hoy_str))
-                olvidados = db.cursor.fetchall()
-                container_alerta_cierres.visible = len(olvidados) > 0
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT DISTINCT fecha_corta FROM ventas WHERE fecha_corta >= %s AND fecha_corta < %s AND fecha_corta NOT IN (SELECT fecha_corta FROM cierres)
+                        UNION SELECT DISTINCT fecha_corta FROM gastos WHERE fecha_corta >= %s AND fecha_corta < %s AND fecha_corta NOT IN (SELECT fecha_corta FROM cierres)
+                    """, (limite_str, hoy_str, limite_str, hoy_str))
+                    olvidados = cur.fetchall()
+                    container_alerta_cierres.visible = len(olvidados) > 0
             except Exception as ex:
                 print(f"Error cierres: {ex}")
+            finally:
+                db.release_conn(conn)
 
         def refrescar_pantallas(e=None):
-            try:
-                db.conn.rollback()
-            except:
-                pass
-
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
             lbl_fecha.value = fecha_str
 
@@ -1431,43 +1557,49 @@ def main(page: ft.Page):
 
         def ejecutar_cierre_dia(e):
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("SELECT id, nombre FROM clientes")
-                all_clients = db.cursor.fetchall()
-                faltantes = []
+                with conn.cursor() as cur:
+                    cur.execute("SELECT id, nombre FROM clientes")
+                    all_clients = cur.fetchall()
+                    faltantes = []
 
-                for c_id, c_name in all_clients:
-                    db.cursor.execute("SELECT 1 FROM ventas WHERE cliente_id=%s AND fecha_corta=%s", (c_id, fecha_str))
-                    has_v = db.cursor.fetchone()
-                    db.cursor.execute("SELECT 1 FROM blacklist WHERE cliente_id=%s AND fecha_corta=%s", (c_id, fecha_str))
-                    has_b = db.cursor.fetchone()
-                    if not has_v and not has_b:
-                        faltantes.append(c_name)
+                    for c_id, c_name in all_clients:
+                        cur.execute("SELECT 1 FROM ventas WHERE cliente_id=%s AND fecha_corta=%s", (c_id, fecha_str))
+                        has_v = cur.fetchone()
+                        cur.execute("SELECT 1 FROM blacklist WHERE cliente_id=%s AND fecha_corta=%s", (c_id, fecha_str))
+                        has_b = cur.fetchone()
+                        if not has_v and not has_b:
+                            faltantes.append(c_name)
 
-                if faltantes:
-                    mostrar_snack(f"🚫 Faltan clientes por procesar hoy.", es_error=True)
-                    return
+                    if faltantes:
+                        mostrar_snack(f"🚫 Faltan clientes por procesar hoy.", es_error=True)
+                        return
 
-                db.cursor.execute("INSERT INTO cierres (fecha_corta) VALUES (%s) ON CONFLICT (fecha_corta) DO NOTHING", (fecha_str,))
-                db.conn.commit()
+                    cur.execute("INSERT INTO cierres (fecha_corta) VALUES (%s) ON CONFLICT (fecha_corta) DO NOTHING", (fecha_str,))
+                    conn.commit()
                 mostrar_snack("🔒 Caja cerrada con éxito.")
                 refrescar_pantallas()
             except Exception as ex:
-                db.conn.rollback()
+                conn.rollback()
                 mostrar_snack(f"Error cerrando: {ex}", es_error=True)
+            finally:
+                db.release_conn(conn)
 
         def ejecutar_apertura_dia(e):
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
+            conn = db.get_conn()
             try:
-                db.asegurar_conexion()
-                db.cursor.execute("DELETE FROM cierres WHERE fecha_corta=%s", (fecha_str,))
-                db.conn.commit()
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM cierres WHERE fecha_corta=%s", (fecha_str,))
+                    conn.commit()
                 mostrar_snack("🔓 Caja reabierta.")
                 refrescar_pantallas()
             except Exception as ex:
-                db.conn.rollback()
+                conn.rollback()
                 mostrar_snack(f"Error abriendo: {ex}", es_error=True)
+            finally:
+                db.release_conn(conn)
 
         btn_carrusel = ft.ElevatedButton("⚡ Carrusel", icon=ft.icons.FLASHLIGHT_ON, on_click=abrir_carrusel_click, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
         btn_cerrar_caja = ft.ElevatedButton("🔒 Cerrar", icon=ft.icons.LOCK, on_click=ejecutar_cierre_dia, bgcolor=ft.colors.GREY_800, color=C_BLANCO)
