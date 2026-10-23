@@ -13,14 +13,27 @@ class Database:
         self.db_url = "postgresql://neondb_owner:npg_k95jPxErNLgZ@ep-holy-cherry-b8dz8gf1.c-14.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
         self.conn = None
         self.cursor = None
+        self.conectar()
+
+    def conectar(self):
         try:
-            self.conn = psycopg2.connect(self.db_url, connect_timeout=10)
-            self.cursor = self.conn.cursor()
-            self.crear_tablas()
+            if self.conn is None or self.conn.closed != 0:
+                self.conn = psycopg2.connect(self.db_url, connect_timeout=10)
+                self.cursor = self.conn.cursor()
+                self.crear_tablas()
         except Exception as e:
             if self.conn:
                 self.conn.close()
             raise RuntimeError(f"No se pudo conectar con Neon: {e}") from e
+
+    def asegurar_conexion(self):
+        try:
+            if self.conn is None or self.conn.closed != 0:
+                self.conectar()
+            else:
+                self.cursor.execute("SELECT 1;")
+        except Exception:
+            self.conectar()
 
     def crear_tablas(self):
         try:
@@ -85,12 +98,16 @@ def main(page: ft.Page):
     C_TEXTO_NEGRO = ft.colors.BLACK
     C_BLANCO = ft.colors.WHITE
 
+    # FilePicker para guardar el reporte en la carpeta que elija el usuario
+    file_picker_guardar = ft.FilePicker()
+    page.overlay.append(file_picker_guardar)
+
     def mostrar_snack(mensaje: str, es_error=False):
         color_bg = ft.colors.RED_700 if es_error else C_CELESTE_PRINCIPAL
         snack = ft.SnackBar(
             content=ft.Text(mensaje, color=C_BLANCO, weight=ft.FontWeight.BOLD),
             bgcolor=color_bg,
-            duration=2500
+            duration=3000
         )
         page.overlay.append(snack)
         snack.open = True
@@ -98,6 +115,7 @@ def main(page: ft.Page):
 
     def iniciar_sistema_tienda():
         page.clean()
+        page.overlay.append(file_picker_guardar)
 
         estado = {
             "fecha": datetime.date.today(),
@@ -109,6 +127,7 @@ def main(page: ft.Page):
         }
 
         def es_dia_congelado():
+            db.asegurar_conexion()
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
             db.cursor.execute("SELECT 1 FROM cierres WHERE fecha_corta=%s", (fecha_str,))
             return db.cursor.fetchone() is not None
@@ -226,6 +245,7 @@ def main(page: ft.Page):
                 pend_nuevo = max(0.0, tot_nuevo - p_nuevo)
 
                 try:
+                    db.asegurar_conexion()
                     db.cursor.execute("""
                         UPDATE ventas SET producto=%s, total=%s, pagado=%s, pendiente=%s WHERE id=%s
                     """, (prod_nuevo, tot_nuevo, p_nuevo, pend_nuevo, estado["edit_venta_id"]))
@@ -271,6 +291,7 @@ def main(page: ft.Page):
                 if monto < 0:
                     raise ValueError()
                 fecha_str = estado["fecha"].strftime("%Y-%m-%d")
+                db.asegurar_conexion()
                 db.cursor.execute("INSERT INTO fondo_caja (fecha_corta, monto) VALUES (%s, %s) ON CONFLICT (fecha_corta) DO UPDATE SET monto = EXCLUDED.monto", (fecha_str, monto))
                 db.conn.commit()
                 mostrar_snack("Fondo inicial asignado.")
@@ -317,6 +338,7 @@ def main(page: ft.Page):
                 ft.DataColumn(ft.Text("Nombre", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Servicio", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Tarifa", weight=ft.FontWeight.BOLD)),
+                ft.DataColumn(ft.Text("Deuda Total", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Acciones", weight=ft.FontWeight.BOLD)),
             ],
             rows=[]
@@ -390,6 +412,7 @@ def main(page: ft.Page):
 
             notas = tf_cli_notas.value.strip() if tf_cli_notas.value else ""
             try:
+                db.asegurar_conexion()
                 if estado["edit_client_id"]:
                     db.cursor.execute("UPDATE clientes SET nombre=%s, servicio=%s, precio=%s, notas=%s WHERE id=%s",
                                       (nombre, servicio, precio, notas, estado["edit_client_id"]))
@@ -418,6 +441,7 @@ def main(page: ft.Page):
             dt_historial_cli.rows = []
             lbl_hist_cli_info.value = f"Cliente: {nombre}\nNotas: {notas if notas else 'Ninguna'}"
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("SELECT fecha_corta, producto, pagado, pendiente FROM ventas WHERE cliente_id=%s ORDER BY id DESC", (cid,))
                 ventas = db.cursor.fetchall()
                 if not ventas:
@@ -482,6 +506,7 @@ def main(page: ft.Page):
 
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("INSERT INTO gastos (descripcion, monto, fecha_corta) VALUES (%s, %s, %s)", (desc, monto, fecha_str))
                 db.conn.commit()
                 tf_gas_desc.value = ""
@@ -569,6 +594,7 @@ def main(page: ft.Page):
             f_ini = tf_hist_inicio.value.strip()
             f_fin = tf_hist_fin.value.strip()
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("SELECT SUM(pagado) FROM ventas WHERE fecha_corta BETWEEN %s AND %s", (f_ini, f_fin))
                 t_ingresos = db.cursor.fetchone()[0] or 0.0
 
@@ -614,27 +640,14 @@ def main(page: ft.Page):
             except Exception as ex:
                 mostrar_snack(f"Error procesando: {ex}", es_error=True)
 
-        lbl_descarga_info = ft.Text("Se generará un archivo CSV detallando los ingresos diarios, gastos, efectivo en caja y deudas pendientes.", size=12)
-        tf_nombre_archivo = ft.TextField(label="Nombre del archivo", value="reporte_tienda_pantuj.csv", border_radius=8)
-
-        dialog_descarga = ft.AlertDialog(
-            title=ft.Text("📥 Descargar Reporte Excel (CSV)", weight=ft.FontWeight.BOLD),
-            content=ft.Container(
-                content=ft.Column([lbl_descarga_info, tf_nombre_archivo], spacing=10, scroll=ft.ScrollMode.AUTO),
-                padding=6,
-                width=340
-            ),
-            actions=[]
-        )
-
-        def ejecutar_descarga_excel(e):
+        # LÓGICA DE EXPORTACIÓN CON DIÁLOGO NATIVO DE WINDOWS
+        def exportar_csv_con_ruta(path_destino):
+            if not path_destino:
+                return
             f_ini = tf_hist_inicio.value.strip()
             f_fin = tf_hist_fin.value.strip()
-            nombre_personalizado = tf_nombre_archivo.value.strip()
-            if not nombre_personalizado.endswith(".csv"):
-                nombre_personalizado += ".csv"
-
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("""
                     SELECT DISTINCT fecha_corta FROM ventas WHERE fecha_corta BETWEEN %s AND %s
                     UNION SELECT fecha_corta FROM gastos WHERE fecha_corta BETWEEN %s AND %s ORDER BY fecha_corta ASC
@@ -698,33 +711,34 @@ def main(page: ft.Page):
                 filas_csv.append([])
                 filas_csv.append(["SUMA TOTAL DE DEUDAS PENDIENTES", "", "", "", f"{suma_deudas_total:.2f}"])
 
-                with open(nombre_personalizado, mode="w", newline="", encoding="utf-8-sig") as archivo_salida:
+                with open(path_destino, mode="w", newline="", encoding="utf-8-sig") as archivo_salida:
                     writer = csv.writer(archivo_salida)
                     writer.writerows(filas_csv)
 
-                cerrar_dialogo_seguro(dialog_descarga)
-                mostrar_snack(f"📥 Archivo guardado correctamente: {nombre_personalizado}")
+                mostrar_snack(f"📥 Archivo guardado correctamente en: {path_destino}")
             except Exception as ex:
                 mostrar_snack(f"Error al exportar archivo: {ex}", es_error=True)
 
-        def abrir_ventana_descarga(e):
-            cerrar_dialogo_seguro(dialog_descarga)
-            tf_nombre_archivo.value = f"reporte_{tf_hist_inicio.value.strip()}_al_{tf_hist_fin.value.strip()}.csv"
-            dialog_descarga.actions = [
-                ft.TextButton("Cancelar", on_click=lambda e: cerrar_dialogo_seguro(dialog_descarga)),
-                ft.ElevatedButton("Descargar", icon=ft.icons.DOWNLOAD, on_click=ejecutar_descarga_excel, bgcolor=ft.colors.GREEN_800, color=C_BLANCO)
-            ]
-            if dialog_descarga not in page.overlay:
-                page.overlay.append(dialog_descarga)
-            dialog_descarga.open = True
-            page.update()
+        def al_seleccionar_guardar(e: ft.FilePickerResultEvent):
+            if e.path:
+                exportar_csv_con_ruta(e.path)
+
+        file_picker_guardar.on_result = al_seleccionar_guardar
+
+        def abrir_guardar_como(e):
+            nombre_defecto = f"reporte_tienda_pantuj_{tf_hist_inicio.value.strip()}_al_{tf_hist_fin.value.strip()}.csv"
+            file_picker_guardar.save_file(
+                dialog_title="Guardar Reporte Excel (CSV)",
+                file_name=nombre_defecto,
+                allowed_extensions=["csv"]
+            )
 
         tab_historial = ft.Container(
             content=ft.Column([
                 ft.Row([tf_hist_inicio, tf_hist_fin], spacing=4),
                 ft.Row([
                     ft.ElevatedButton("📊 Procesar Reporte", icon=ft.icons.ANALYTICS, on_click=procesar_historial_rango, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO, expand=True),
-                    ft.ElevatedButton("📥 Ventana Descarga", icon=ft.icons.DOWNLOAD, on_click=abrir_ventana_descarga, bgcolor=ft.colors.GREEN_800, color=C_BLANCO, expand=True),
+                    ft.ElevatedButton("📥 Descargar Excel", icon=ft.icons.DOWNLOAD, on_click=abrir_guardar_como, bgcolor=ft.colors.GREEN_800, color=C_BLANCO, expand=True),
                 ], spacing=4),
                 ft.Divider(color=C_GRIS_BORDE),
                 ft.Container(
@@ -752,17 +766,14 @@ def main(page: ft.Page):
             actions=[]
         )
 
-        def abrir_dialogo_abono(v_id, cliente_nombre, pendiente_actual):
+        def abrir_dialogo_abono(v_id_o_cid, cliente_nombre, pendiente_actual, es_por_cliente=False):
             cerrar_dialogo_seguro(dialog_abono)
             tf_abono_monto.value = ""
 
             def ejecutar_abono(e):
                 try:
                     abono = float(tf_abono_monto.value)
-                    db.cursor.execute("SELECT pendiente FROM ventas WHERE id=%s", (v_id,))
-                    fila_saldo = db.cursor.fetchone()
-                    saldo_actual = float(fila_saldo[0]) if fila_saldo else 0.0
-                    if abono <= 0 or abono > saldo_actual:
+                    if abono <= 0 or abono > pendiente_actual:
                         raise ValueError()
                 except (ValueError, TypeError):
                     mostrar_snack("Monto inválido o mayor al saldo actual.", es_error=True)
@@ -772,14 +783,36 @@ def main(page: ft.Page):
                 fecha_iso = datetime.datetime.now().isoformat()
 
                 try:
-                    db.cursor.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = pendiente - %s WHERE id = %s", (abono, abono, v_id))
-                    db.cursor.execute("SELECT cliente_id, producto FROM ventas WHERE id=%s", (v_id,))
-                    c_id, prod_original = db.cursor.fetchone()
+                    db.asegurar_conexion()
+                    if es_por_cliente:
+                        c_id = v_id_o_cid
+                        db.cursor.execute("SELECT id, pendiente FROM ventas WHERE cliente_id=%s AND pendiente > 0 ORDER BY id ASC", (c_id,))
+                        deudas_viejas = db.cursor.fetchall()
+                        por_abonar = abono
+                        for v_id, v_pend in deudas_viejas:
+                            if por_abonar <= 0: break
+                            v_pend = float(v_pend)
+                            if por_abonar >= v_pend:
+                                db.cursor.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = 0 WHERE id = %s", (v_pend, v_id))
+                                por_abonar -= v_pend
+                            else:
+                                db.cursor.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = pendiente - %s WHERE id = %s", (por_abonar, por_abonar, v_id))
+                                por_abonar = 0
 
-                    db.cursor.execute("""
-                        INSERT INTO ventas (cliente_id, producto, total, pagado, pendiente, fecha_corta, fecha_iso)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """, (c_id, f"Abono a: {prod_original}", 0.0, abono, 0.0, fecha_str, fecha_iso))
+                        db.cursor.execute("""
+                            INSERT INTO ventas (cliente_id, producto, total, pagado, pendiente, fecha_corta, fecha_iso)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """, (c_id, f"Abono a deudas de {cliente_nombre}", 0.0, abono, 0.0, fecha_str, fecha_iso))
+                    else:
+                        v_id = v_id_o_cid
+                        db.cursor.execute("UPDATE ventas SET pagado = pagado + %s, pendiente = pendiente - %s WHERE id = %s", (abono, abono, v_id))
+                        db.cursor.execute("SELECT cliente_id, producto FROM ventas WHERE id=%s", (v_id,))
+                        c_id, prod_original = db.cursor.fetchone()
+
+                        db.cursor.execute("""
+                            INSERT INTO ventas (cliente_id, producto, total, pagado, pendiente, fecha_corta, fecha_iso)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """, (c_id, f"Abono a: {prod_original}", 0.0, abono, 0.0, fecha_str, fecha_iso))
 
                     db.conn.commit()
                     cerrar_dialogo_seguro(dialog_abono)
@@ -789,7 +822,7 @@ def main(page: ft.Page):
                     db.conn.rollback()
                     mostrar_snack(f"Error en abono: {ex}", es_error=True)
 
-            lbl_abono_info.value = f"Cliente: {cliente_nombre}\nDeuda: Q {pendiente_actual:.2f}"
+            lbl_abono_info.value = f"Cliente: {cliente_nombre}\nDeuda Total: Q {pendiente_actual:.2f}"
             dialog_abono.actions = [
                 ft.TextButton("Cancelar", on_click=lambda e: cerrar_dialogo_seguro(dialog_abono)),
                 ft.ElevatedButton("Aplicar", on_click=ejecutar_abono, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO)
@@ -842,6 +875,7 @@ def main(page: ft.Page):
             tf_car_pago.value = str(c_price)
             tf_car_abono_v.value = "0.00"
 
+            db.asegurar_conexion()
             db.cursor.execute("SELECT SUM(pendiente) FROM ventas WHERE cliente_id=%s", (c_id,))
             res_deuda = db.cursor.fetchone()
             deuda_total = float(res_deuda[0]) if res_deuda and res_deuda[0] else 0.0
@@ -872,6 +906,7 @@ def main(page: ft.Page):
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
             cli = estado["carrusel_list"][estado["carrusel_idx"]]
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("INSERT INTO blacklist (cliente_id, fecha_corta, motivo) VALUES (%s, %s, %s)", (cli[0], fecha_str, "Ausente"))
                 db.conn.commit()
                 estado["carrusel_list"].pop(estado["carrusel_idx"])
@@ -903,6 +938,7 @@ def main(page: ft.Page):
             pendiente_hoy = max(0.0, tot - pag)
 
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("""
                     INSERT INTO ventas (cliente_id, producto, total, pagado, pendiente, fecha_corta, fecha_iso)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -968,6 +1004,7 @@ def main(page: ft.Page):
             cerrar_dialogo_seguro(dialog_carrusel)
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("""
                     SELECT id, nombre, servicio, precio, notas FROM clientes 
                     WHERE id NOT IN (SELECT cliente_id FROM ventas WHERE fecha_corta=%s)
@@ -995,6 +1032,7 @@ def main(page: ft.Page):
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
 
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("""
                     SELECT v.id, c.nombre, v.producto, v.total, v.pagado, v.pendiente 
                     FROM ventas v JOIN clientes c ON v.cliente_id = c.id WHERE v.fecha_corta=%s
@@ -1010,6 +1048,7 @@ def main(page: ft.Page):
                             mostrar_snack("Caja congelada hoy.", es_error=True)
                             return
                         try:
+                            db.asegurar_conexion()
                             db.cursor.execute("DELETE FROM ventas WHERE id=%s", (vid,))
                             db.conn.commit()
                             mostrar_snack(f"Registro de '{name}' eliminado.")
@@ -1072,6 +1111,7 @@ def main(page: ft.Page):
                             mostrar_snack("Caja congelada.", es_error=True)
                             return
                         try:
+                            db.asegurar_conexion()
                             db.cursor.execute("DELETE FROM blacklist WHERE id=%s", (bid,))
                             db.conn.commit()
                             mostrar_snack(f"'{name}' restaurado.")
@@ -1096,6 +1136,7 @@ def main(page: ft.Page):
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
 
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("SELECT monto FROM fondo_caja WHERE fecha_corta=%s", (fecha_str,))
                 row_f = db.cursor.fetchone()
                 fondo_monto = row_f[0] if row_f else 0.0
@@ -1140,18 +1181,28 @@ def main(page: ft.Page):
             lista_clientes_movil.controls.clear()
             busqueda = f"%{tf_cli_buscar.value.strip()}%" if tf_cli_buscar.value else "%"
             try:
-                db.cursor.execute("SELECT id, nombre, servicio, precio, notas FROM clientes WHERE nombre ILIKE %s ORDER BY nombre ASC", (busqueda,))
+                db.asegurar_conexion()
+                db.cursor.execute("""
+                    SELECT c.id, c.nombre, c.servicio, c.precio, c.notas,
+                           COALESCE(SUM(v.pendiente), 0) as deuda_total
+                    FROM clientes c
+                    LEFT JOIN ventas v ON c.id = v.cliente_id
+                    WHERE c.nombre ILIKE %s
+                    GROUP BY c.id, c.nombre, c.servicio, c.precio, c.notas
+                    ORDER BY c.nombre ASC
+                """, (busqueda,))
                 filas_db = db.cursor.fetchall()
                 
                 nuevas_filas = []
                 for r in filas_db:
-                    c_id, nombre, servicio, precio, notas = r
+                    c_id, nombre, servicio, precio, notas, deuda_total = r
 
                     def editar_fn(e, cid=c_id, n=nombre, s=servicio, p=precio, nt=notas):
                         abrir_modal_cliente(cid, n, s, p, nt)
 
                     def borrar_fn(e, cid=c_id, n=nombre):
                         try:
+                            db.asegurar_conexion()
                             db.cursor.execute("DELETE FROM clientes WHERE id=%s", (cid,))
                             db.conn.commit()
                             cargar_tabla_clientes()
@@ -1163,14 +1214,23 @@ def main(page: ft.Page):
                     def ver_hist_fn(e, cid=c_id, n=nombre, nt=notas):
                         ver_historial_cliente(cid, n, nt)
 
+                    def abonar_cliente_fn(e, cid=c_id, cname=nombre, d_tot=deuda_total):
+                        abrir_dialogo_abono(cid, cname, d_tot, es_por_cliente=True)
+
+                    btn_abonar_cli = ft.ElevatedButton("💰 Abonar", icon=ft.icons.PAYMENTS, on_click=abonar_cliente_fn, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO) if deuda_total > 0 else ft.Container()
+
                     if page.width <= 700:
                         card_item = ft.Container(
                             content=ft.Column([
                                 ft.Row([
                                     ft.Text(f"#{c_id} - {nombre}", weight=ft.FontWeight.BOLD, size=13, color=C_TEXTO_NEGRO),
-                                    ft.Text(f"Q {precio:.2f}", weight=ft.FontWeight.BOLD, size=13, color=C_CELESTE_PRINCIPAL)
+                                    ft.Text(f"Tarifa: Q {precio:.2f}", weight=ft.FontWeight.BOLD, size=12, color=C_CELESTE_PRINCIPAL)
                                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                                 ft.Text(f"Servicio: {servicio}", size=11, color=ft.colors.GREY_700),
+                                ft.Row([
+                                    ft.Text(f"Deuda: Q {deuda_total:.2f}", size=12, color=ft.colors.RED_700 if deuda_total > 0 else ft.colors.GREEN_800, weight=ft.FontWeight.BOLD),
+                                    btn_abonar_cli
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                                 ft.Row([
                                     ft.IconButton(icon=ft.icons.REMOVE_RED_EYE, icon_size=16, icon_color=C_CELESTE_PRINCIPAL, on_click=ver_hist_fn, tooltip="Historial"),
                                     ft.IconButton(icon=ft.icons.EDIT, icon_size=16, icon_color=ft.colors.GREY_700, on_click=editar_fn, tooltip="Editar"),
@@ -1191,7 +1251,9 @@ def main(page: ft.Page):
                                 ft.DataCell(ft.Text(nombre, color=C_TEXTO_NEGRO, weight=ft.FontWeight.BOLD)),
                                 ft.DataCell(ft.Text(servicio, color=C_TEXTO_NEGRO)),
                                 ft.DataCell(ft.Text(f"Q {precio:.2f}", color=C_TEXTO_NEGRO)),
+                                ft.DataCell(ft.Text(f"Q {deuda_total:.2f}", color=ft.colors.RED_700 if deuda_total > 0 else ft.colors.GREEN_800, weight=ft.FontWeight.BOLD)),
                                 ft.DataCell(ft.Row([
+                                    btn_abonar_cli,
                                     ft.IconButton(icon=ft.icons.REMOVE_RED_EYE, icon_color=C_CELESTE_PRINCIPAL, on_click=ver_hist_fn, tooltip="Historial"),
                                     ft.IconButton(icon=ft.icons.EDIT, icon_color=ft.colors.GREY_700, on_click=editar_fn, tooltip="Editar"),
                                     ft.IconButton(icon=ft.icons.DELETE, icon_color=ft.colors.RED_600, on_click=borrar_fn, tooltip="Eliminar"),
@@ -1207,6 +1269,7 @@ def main(page: ft.Page):
             dt_gastos.rows = []
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("SELECT id, descripcion, monto FROM gastos WHERE fecha_corta=%s", (fecha_str,))
                 for r in db.cursor.fetchall():
                     g_id, desc, monto = r
@@ -1216,6 +1279,7 @@ def main(page: ft.Page):
                             mostrar_snack("Caja congelada.", es_error=True)
                             return
                         try:
+                            db.asegurar_conexion()
                             db.cursor.execute("DELETE FROM gastos WHERE id=%s", (gid,))
                             db.conn.commit()
                             refrescar_pantallas()
@@ -1240,6 +1304,7 @@ def main(page: ft.Page):
             lista_deudas_movil.controls.clear()
             
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("""
                     SELECT v.id, v.fecha_corta, c.nombre, v.producto, v.total, v.pagado, v.pendiente 
                     FROM ventas v JOIN clientes c ON v.cliente_id = c.id WHERE v.pendiente > 0 ORDER BY v.id DESC
@@ -1316,6 +1381,7 @@ def main(page: ft.Page):
             hoy_str = hoy.strftime("%Y-%m-%d")
             limite_str = limite_antiguedad.strftime("%Y-%m-%d")
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("""
                     SELECT DISTINCT fecha_corta FROM ventas WHERE fecha_corta >= %s AND fecha_corta < %s AND fecha_corta NOT IN (SELECT fecha_corta FROM cierres)
                     UNION SELECT DISTINCT fecha_corta FROM gastos WHERE fecha_corta >= %s AND fecha_corta < %s AND fecha_corta NOT IN (SELECT fecha_corta FROM cierres)
@@ -1354,6 +1420,7 @@ def main(page: ft.Page):
             verificar_cierres_olvidados()
             cargar_tabla_activos_inactivos()
             cargar_datos_caja()
+            cargar_tabla_clientes()
             cargar_tabla_gastos()
             cargar_tabla_deudas()
             page.update()
@@ -1365,6 +1432,7 @@ def main(page: ft.Page):
         def ejecutar_cierre_dia(e):
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("SELECT id, nombre FROM clientes")
                 all_clients = db.cursor.fetchall()
                 faltantes = []
@@ -1392,6 +1460,7 @@ def main(page: ft.Page):
         def ejecutar_apertura_dia(e):
             fecha_str = estado["fecha"].strftime("%Y-%m-%d")
             try:
+                db.asegurar_conexion()
                 db.cursor.execute("DELETE FROM cierres WHERE fecha_corta=%s", (fecha_str,))
                 db.conn.commit()
                 mostrar_snack("🔓 Caja reabierta.")
