@@ -186,7 +186,6 @@ def main(page: ft.Page):
             padding=2, expand=True
         )
 
-        # Campos de edición de cobros del día
         tf_edit_v_prod = ft.TextField(label="Detalle / Producto", border_radius=8)
         tf_edit_v_total = ft.TextField(label="Total (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
         tf_edit_v_efectivo = ft.TextField(label="Efectivo Recibido (Q)", keyboard_type=ft.KeyboardType.NUMBER, border_radius=8)
@@ -615,10 +614,99 @@ def main(page: ft.Page):
             except Exception as ex:
                 mostrar_snack(f"Error procesando: {ex}", es_error=True)
 
+        # FUNCIÓN DE DESCARGA DE EXCEL (CSV)
+        def descargar_excel_reporte(e):
+            f_ini = tf_hist_inicio.value.strip()
+            f_fin = tf_hist_fin.value.strip()
+            try:
+                nombre_archivo = f"reporte_tienda_pantuj_{f_ini}_al_{f_fin}.csv"
+                
+                # Obtener días del rango
+                db.cursor.execute("""
+                    SELECT DISTINCT fecha_corta FROM ventas WHERE fecha_corta BETWEEN %s AND %s
+                    UNION SELECT fecha_corta FROM gastos WHERE fecha_corta BETWEEN %s AND %s ORDER BY fecha_corta ASC
+                """, (f_ini, f_fin, f_ini, f_fin))
+                dias = db.cursor.fetchall()
+
+                dias_semana_nombres = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+
+                filas_csv = []
+                # Cabecera principal reporte diario
+                filas_csv.append(["--- REPORTE DIARIO DE INGRESOS Y GASTOS ---"])
+                filas_csv.append(["Fecha", "Dia", "Ingreso Recaudado (Q)", "Gastos Retirados (Q)", "Efectivo Esperado en Caja (Q)"])
+
+                suma_ingresos_total = 0.0
+                suma_gastos_total = 0.0
+                suma_caja_fisico_total = 0.0
+
+                for d in dias:
+                    f_dia = d[0]
+                    dt_obj = datetime.datetime.strptime(f_dia, "%Y-%m-%d").date()
+                    nombre_dia = dias_semana_nombres[dt_obj.weekday()]
+
+                    # Ingresos del día
+                    db.cursor.execute("SELECT SUM(pagado) FROM ventas WHERE fecha_corta=%s", (f_dia,))
+                    ing_d = db.cursor.fetchone()[0] or 0.0
+
+                    # Gastos del día
+                    db.cursor.execute("SELECT SUM(monto) FROM gastos WHERE fecha_corta=%s", (f_dia,))
+                    gas_d = db.cursor.fetchone()[0] or 0.0
+
+                    # Fondo de caja inicial del día
+                    db.cursor.execute("SELECT monto FROM fondo_caja WHERE fecha_corta=%s", (f_dia,))
+                    row_f = db.cursor.fetchone()
+                    fondo_d = row_f[0] if row_f else 0.0
+
+                    efectivo_fisico_dia = fondo_d + ing_d - gas_d
+
+                    suma_ingresos_total += ing_d
+                    suma_gastos_total += gas_d
+                    suma_caja_fisico_total += efectivo_fisico_dia
+
+                    filas_csv.append([f_dia, nombre_dia, f"{ing_d:.2f}", f"{gas_d:.2f}", f"{efectivo_fisico_dia:.2f}"])
+
+                # Sumatorias totales
+                filas_csv.append([])
+                filas_csv.append(["SUMA TOTAL INGRESOS", "", f"{suma_ingresos_total:.2f}"])
+                filas_csv.append(["SUMA TOTAL GASTOS", "", f"{suma_gastos_total:.2f}"])
+                filas_csv.append(["TOTAL ACUMULADO ESPERADO EN CAJA FISICA", "", f"{suma_caja_fisico_total:.2f}"])
+
+                # Deudas pendientes actuales
+                filas_csv.append([])
+                filas_csv.append(["--- LISTADO DE DEUDAS PENDIENTES ---"])
+                filas_csv.append(["ID Venta", "Fecha", "Cliente", "Detalle", "Debe (Q)"])
+
+                db.cursor.execute("""
+                    SELECT v.id, v.fecha_corta, c.nombre, v.producto, v.pendiente 
+                    FROM ventas v JOIN clientes c ON v.cliente_id = c.id WHERE v.pendiente > 0 ORDER BY v.id DESC
+                """)
+                deudas = db.cursor.fetchall()
+                suma_deudas_total = 0.0
+
+                for deb in deudas:
+                    v_id, fecha_v, cli_v, prod_v, pend_v = deb
+                    suma_deudas_total += pend_v
+                    filas_csv.append([str(v_id), fecha_v, cli_v, prod_v, f"{pend_v:.2f}"])
+
+                filas_csv.append([])
+                filas_csv.append(["SUMA TOTAL DE DEUDAS PENDIENTES", "", "", "", f"{suma_deudas_total:.2f}"])
+
+                # Escribir archivo CSV descargable
+                with open(nombre_archivo, mode="w", newline="", encoding="utf-8-sig") as archivo_salida:
+                    writer = csv.writer(archivo_salida)
+                    writer.writerows(filas_csv)
+
+                mostrar_snack(f"📥 Archivo descargado: {nombre_archivo}")
+            except Exception as ex:
+                mostrar_snack(f"Error al exportar archivo: {ex}", es_error=True)
+
         tab_historial = ft.Container(
             content=ft.Column([
                 ft.Row([tf_hist_inicio, tf_hist_fin], spacing=4),
-                ft.ElevatedButton("📊 Procesar Reporte", icon=ft.icons.ANALYTICS, on_click=procesar_historial_rango, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO),
+                ft.Row([
+                    ft.ElevatedButton("📊 Procesar Reporte", icon=ft.icons.ANALYTICS, on_click=procesar_historial_rango, bgcolor=C_CELESTE_PRINCIPAL, color=C_BLANCO, expand=True),
+                    ft.ElevatedButton("📥 Descargar Excel", icon=ft.icons.DOWNLOAD, on_click=descargar_excel_reporte, bgcolor=ft.colors.GREEN_800, color=C_BLANCO, expand=True),
+                ], spacing=4),
                 ft.Divider(color=C_GRIS_BORDE),
                 ft.Container(
                     content=ft.Column([ft.Text("📊 Métricas", size=12, weight=ft.FontWeight.BOLD), dt_resumen_macro]),
@@ -705,12 +793,14 @@ def main(page: ft.Page):
         col_form_carrusel = ft.Column([tf_car_desc, tf_car_total, tf_car_pago, lbl_car_alerta, tf_car_abono_v], visible=False, spacing=6)
         col_preg_carrusel = ft.Column([], visible=True, spacing=6)
 
+        # SOLUCIÓN DE ALTURA Y DESPLAZAMIENTO EN CARRUSEL PARA EVITAR BAJADA BRUSCA CON TECLADO
         dialog_carrusel = ft.AlertDialog(
             title=ft.Row([ft.Text("⚡ Carrusel", weight=ft.FontWeight.BOLD), lbl_car_idx], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             content=ft.Container(
                 content=ft.Column([lbl_car_name, lbl_car_info, ft.Divider(color=C_GRIS_BORDE), col_preg_carrusel, col_form_carrusel], spacing=6, scroll=ft.ScrollMode.AUTO),
                 padding=4,
-                width=320
+                width=320,
+                height=340
             ),
             actions=[]
         )
